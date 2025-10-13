@@ -1,4 +1,4 @@
-import { Metadata } from 'next'
+import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'Home | Testcraft',
@@ -39,7 +39,7 @@ export default function Home() {
             Welcome to Next.js 15 with Coolify
           </h2>
           <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-            Built with the latest Next.js 15 features, deployed seamlessly with Coolify's Nixpacks build system.
+            Built with the latest Next.js 15 features, deployed seamlessly with Coolify&apos;s Nixpacks build system.
           </p>
         </div>
       </div>
@@ -69,7 +69,7 @@ export default function Home() {
         <div className="group rounded-lg border border-gray-200 dark:border-gray-800 px-5 py-4 transition-all hover:border-orange-300 hover:shadow-lg hover:shadow-orange-500/10">
           <h3 className="mb-3 text-2xl font-semibold text-orange-600 dark:text-orange-400">Deploy</h3>
           <p className="m-0 max-w-[30ch] text-sm text-gray-600 dark:text-gray-300">
-            Instant deployments with Coolify and Nixpacks. Zero-config deployment experience.
+            Instant deployments with Coolify and Nixpacks. Zero configuration deployment experience.
           </p>
         </div>
       </div>

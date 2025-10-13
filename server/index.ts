@@ -38,7 +38,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  console.log("Starting server initialization...");
   const server = await registerRoutes(app);
+  console.log("Routes registered successfully");
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -52,9 +54,13 @@ app.use((req, res, next) => {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (app.get("env") === "development") {
+    console.log("Setting up Vite for development...");
     await setupVite(app, server);
+    console.log("Vite setup completed");
   } else {
+    console.log("Setting up static file serving for production...");
     serveStatic(app);
+    console.log("Static file serving setup completed");
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
@@ -62,6 +68,7 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
+  console.log(`Attempting to start server on port ${port}...`);
   server.listen({
     port,
     host: "0.0.0.0",

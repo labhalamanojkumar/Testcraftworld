@@ -2,16 +2,16 @@
 const nextConfig = {
   // Next.js 15 latest features
   experimental: {
-    appDir: true,
     // Enable React 19 features
     reactCompiler: false, // Set to true if you want to use React Compiler (experimental)
-    // Turbopack optimizations
-    turbo: {
-      rules: {
-        '*.svg': {
-          loaders: ['@svgr/webpack'],
-          as: '*.js',
-        },
+  },
+
+  // Turbopack configuration
+  turbopack: {
+    rules: {
+      '*.svg': {
+        loaders: ['@svgr/webpack'],
+        as: '*.js',
       },
     },
   },
@@ -94,4 +94,4 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig
+export default nextConfig
