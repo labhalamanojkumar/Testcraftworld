@@ -39,6 +39,15 @@ app.use((req, res, next) => {
 
 (async () => {
   console.log("Starting server initialization...");
+  // Ensure DB is available before registering routes
+  try {
+    const { initDB } = await import("./db");
+    await initDB({ retries: 6, delayMs: 2000 });
+  } catch (err) {
+    console.error("Failed to initialize DB, exiting:", err);
+    process.exit(1);
+  }
+
   const server = await registerRoutes(app);
   console.log("Routes registered successfully");
 
