@@ -5,6 +5,7 @@ import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
+import { fileURLToPath } from "url";
 
 const viteLogger = createLogger();
 
@@ -69,7 +70,10 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(process.cwd(), "dist", "public");
+  // Get the directory of the current file (server/vite.ts)
+  const currentDir = path.dirname(fileURLToPath(import.meta.url));
+  // Go up one level to the project root, then to dist/public
+  const distPath = path.resolve(currentDir, "..", "dist", "public");
 
   if (!fs.existsSync(distPath)) {
     throw new Error(
