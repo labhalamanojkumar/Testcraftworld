@@ -56,6 +56,15 @@ function tcpCheck(host: string, port: number, timeoutMs = 5000): Promise<void> {
   });
 }
 
+function errMsg(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+}
+
 // Try to initialize DB connection with retries. Throws if unrecoverable.
 export async function initDB(options?: { retries?: number; delayMs?: number }) {
   const retries = options?.retries ?? 5;
@@ -69,7 +78,7 @@ export async function initDB(options?: { retries?: number; delayMs?: number }) {
       try {
         await tcpCheck(host, port, 5000);
       } catch (tcpErr) {
-        console.warn(`TCP check to ${host}:${port} failed: ${tcpErr?.message || tcpErr}`);
+        console.warn(`TCP check to ${host}:${port} failed: ${errMsg(tcpErr)}`);
         // Try common MySQL port 3306 as a fallback before failing
         const fallbackPort = 3306;
         try {
@@ -92,7 +101,7 @@ export async function initDB(options?: { retries?: number; delayMs?: number }) {
           });
           db = drizzle(pool, { schema, mode: "default" });
         } catch (fallbackErr) {
-          console.warn(`Fallback TCP to ${host}:3306 failed: ${fallbackErr?.message || fallbackErr}`);
+          console.warn(`Fallback TCP to ${host}:3306 failed: ${errMsg(fallbackErr)}`);
           // if fallback also failed, continue to attempt using existing pool pings below
         }
       }
