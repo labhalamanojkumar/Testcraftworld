@@ -1,8 +1,8 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Home | BlogStreamPro',
-  description: 'Welcome to BlogStreamPro - A modern blogging platform built with Next.js 15',
+  title: 'Home | Testcraft',
+  description: 'Welcome to Testcraft - A modern blogging platform built with Next.js 15',
 }
 
 export default function Home() {
@@ -11,7 +11,7 @@ export default function Home() {
       <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
         <div className="flex flex-col items-center lg:items-start">
           <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-4">
-            BlogStreamPro
+            Testcraft
           </h1>
           <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-300 mb-8">
             Modern Blogging Platform

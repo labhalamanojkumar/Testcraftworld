@@ -1,4 +1,4 @@
-# BlogStreamPro - Testcraft World
+# Testcraft - Testcraft World
 
 A modern, full-featured blogging platform built with React, TypeScript, Express.js, and MySQL. Features user authentication, article management, rich text editing, and responsive design.
 
@@ -34,7 +34,7 @@ A modern, full-featured blogging platform built with React, TypeScript, Express.
 1. **Clone the repository**
    ```bash
    git clone https://github.com/manojkumarlabhala/Testcraft.world.git
-   cd BlogStreamPro
+   cd Testcraft
    ```
 
 2. **Install dependencies**
@@ -100,8 +100,8 @@ For production deployment with Docker Compose:
 docker-compose -f docker-compose.prod.yml up -d
 
 # Or build and run manually
-docker build -t blogstreampro .
-docker run -p 3000:3000 --env-file .env blogstreampro
+docker build -t testcraft .
+docker run -p 3000:3000 --env-file .env testcraft
 ```
 
 ## 📝 Available Scripts
@@ -147,7 +147,7 @@ You only need to manually set:
 ## 🏗️ Project Structure
 
 ```
-BlogStreamPro/
+Testcraft/
 ├── client/                 # Frontend React app
 │   ├── src/
 │   │   ├── components/     # Reusable UI components
@@ -192,8 +192,8 @@ npm start
 docker-compose up -d
 
 # Or using Docker directly
-docker build -t blogstreampro .
-docker run -p 3000:3000 --env-file .env blogstreampro
+docker build -t testcraft .
+docker run -p 3000:3000 --env-file .env testcraft
 ```
 
 ### Environment Setup for Production

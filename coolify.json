@@ -1,7 +1,7 @@
 {
   "services": [
     {
-      "name": "blogstreampro",
+      "name": "testcraft",
       "type": "application",
       "source": {
         "type": "github",
@@ -33,7 +33,7 @@
       },
       "domains": [
         {
-          "name": "blogstreampro",
+          "name": "testcraft",
           "type": "generated"
         }
       ]

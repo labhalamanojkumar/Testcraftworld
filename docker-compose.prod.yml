@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  blogstreampro:
+  testcraft:
     build:
       context: .
       dockerfile: Dockerfile
@@ -22,8 +22,8 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      - blogstreampro-network
+      - testcraft-network
 
 networks:
-  blogstreampro-network:
+  testcraft-network:
     driver: bridge

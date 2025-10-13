@@ -3,14 +3,14 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: {
-    default: 'BlogStreamPro',
-    template: '%s | BlogStreamPro'
+    default: 'Testcraft',
+    template: '%s | Testcraft'
   },
   description: 'A modern blogging platform built with Next.js 15, featuring the latest web technologies and optimal performance.',
   keywords: ['blogging', 'content management', 'next.js', 'react', 'typescript', 'modern web'],
-  authors: [{ name: 'BlogStreamPro Team' }],
-  creator: 'BlogStreamPro',
-  publisher: 'BlogStreamPro',
+  authors: [{ name: 'Testcraft Team' }],
+  creator: 'Testcraft',
+  publisher: 'Testcraft',
   formatDetection: {
     email: false,
     address: false,
@@ -24,21 +24,21 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'en_US',
     url: 'http://localhost:3000',
-    title: 'BlogStreamPro',
+    title: 'Testcraft',
     description: 'A modern blogging platform built with Next.js 15',
-    siteName: 'BlogStreamPro',
+    siteName: 'Testcraft',
     images: [
       {
         url: '/og-image.jpg',
         width: 1200,
         height: 630,
-        alt: 'BlogStreamPro - Modern Blogging Platform',
+        alt: 'Testcraft - Modern Blogging Platform',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'BlogStreamPro',
+    title: 'Testcraft',
     description: 'A modern blogging platform built with Next.js 15',
     images: ['/og-image.jpg'],
   },
