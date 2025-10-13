@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  blogstreampro:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - SESSION_SECRET=${SESSION_SECRET:-your-super-secret-session-key-change-this-in-production}
+      - DATABASE_URL=${DATABASE_URL}
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/me"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - blogstreampro-network
+
+networks:
+  blogstreampro-network:
+    driver: bridge

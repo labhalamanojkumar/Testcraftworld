@@ -1,0 +1,43 @@
+{
+  "services": [
+    {
+      "name": "blogstreampro",
+      "type": "application",
+      "source": {
+        "type": "github",
+        "repository": "https://github.com/labhalamanojkumar/Testcraft",
+        "branch": "main",
+        "auto_deploy": true
+      },
+      "build": {
+        "type": "dockerfile",
+        "dockerfile_path": "Dockerfile"
+      },
+      "ports": [
+        {
+          "target": 3000,
+          "published": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": {
+        "NODE_ENV": "production",
+        "PORT": "3000"
+      },
+      "healthcheck": {
+        "type": "http",
+        "path": "/api/me",
+        "port": 3000,
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3
+      },
+      "domains": [
+        {
+          "name": "blogstreampro",
+          "type": "generated"
+        }
+      ]
+    }
+  ]
+}

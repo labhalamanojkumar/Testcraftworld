@@ -64,18 +64,45 @@ A modern, full-featured blogging platform built with React, TypeScript, Express.
    http://localhost:3000
    ```
 
-### Docker Deployment
+### Coolify Deployment (Recommended)
 
-1. **Build and run with Docker Compose**
-   ```bash
-   docker-compose up -d
+1. **Connect your GitHub repository**
+   - In Coolify dashboard, connect your GitHub account
+   - Select the `Testcraft` repository
+
+2. **Create a new service**
+   - Choose "Application" as service type
+   - Select the repository and main branch
+   - Coolify will automatically detect the `coolify.json` configuration
+
+3. **Configure Database**
+   - Create a MySQL database service in Coolify
+   - Link it to your application
+   - Coolify will automatically set the `DATABASE_URL` environment variable
+
+4. **Environment Variables**
+   ```env
+   SESSION_SECRET=your-super-secret-session-key-change-this-in-production
+   SUPER_ADMIN_USERNAME=superadmin
+   SUPER_ADMIN_PASSWORD=securepassword123
    ```
 
-2. **Or build manually**
-   ```bash
-   docker build -t blogstreampro .
-   docker run -p 3000:3000 --env-file .env blogstreampro
-   ```
+5. **Deploy**
+   - Coolify will automatically build and deploy your application
+   - Access your app at the generated domain
+
+### Production Docker Deployment
+
+For production deployment with Docker Compose:
+
+```bash
+# Use the production compose file
+docker-compose -f docker-compose.prod.yml up -d
+
+# Or build and run manually
+docker build -t blogstreampro .
+docker run -p 3000:3000 --env-file .env blogstreampro
+```
 
 ## 📝 Available Scripts
 
@@ -89,7 +116,7 @@ A modern, full-featured blogging platform built with React, TypeScript, Express.
 
 ### Environment Variables
 
-Create a `.env` file based on `.env.example`:
+Create a `.env` file based on `.env.example` or `.env.coolify.example`:
 
 ```env
 PORT=3000
@@ -98,11 +125,24 @@ DATABASE_URL=mysql://username:password@host:port/database?ssl-mode=REQUIRED
 NODE_ENV=production
 ```
 
+### Coolify Environment Variables
+
+When deploying to Coolify, these variables will be automatically set:
+
+- `DATABASE_URL`: Automatically provided when you link a MySQL database
+- `PORT`: Set to 3000 in coolify.json
+- `NODE_ENV`: Set to production
+
+You only need to manually set:
+- `SESSION_SECRET`: Generate a strong random string
+- Optional admin credentials
+
 ### Database Setup
 
-1. Create a MySQL database
-2. Update `DATABASE_URL` in `.env`
-3. Run `npm run db:push` to create tables
+1. Create a MySQL database in Coolify
+2. Link it to your application
+3. The `DATABASE_URL` will be automatically configured
+4. Run database migrations: `npm run db:push`
 
 ## 🏗️ Project Structure
 
