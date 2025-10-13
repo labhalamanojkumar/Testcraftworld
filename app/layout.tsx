@@ -2,9 +2,12 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'BlogStreamPro',
-  description: 'A modern blogging platform built with Next.js 15',
-  keywords: ['blogging', 'content management', 'next.js', 'react'],
+  title: {
+    default: 'BlogStreamPro',
+    template: '%s | BlogStreamPro'
+  },
+  description: 'A modern blogging platform built with Next.js 15, featuring the latest web technologies and optimal performance.',
+  keywords: ['blogging', 'content management', 'next.js', 'react', 'typescript', 'modern web'],
   authors: [{ name: 'BlogStreamPro Team' }],
   creator: 'BlogStreamPro',
   publisher: 'BlogStreamPro',
@@ -18,18 +21,26 @@ export const metadata: Metadata = {
     canonical: '/',
   },
   openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: 'http://localhost:3000',
     title: 'BlogStreamPro',
     description: 'A modern blogging platform built with Next.js 15',
-    url: 'http://localhost:3000',
     siteName: 'BlogStreamPro',
-    locale: 'en_US',
-    type: 'website',
+    images: [
+      {
+        url: '/og-image.jpg',
+        width: 1200,
+        height: 630,
+        alt: 'BlogStreamPro - Modern Blogging Platform',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'BlogStreamPro',
     description: 'A modern blogging platform built with Next.js 15',
-    creator: '@blogstreampro',
+    images: ['/og-image.jpg'],
   },
   robots: {
     index: true,
@@ -42,17 +53,21 @@ export const metadata: Metadata = {
       'max-snippet': -1,
     },
   },
+  verification: {
+    google: 'your-google-verification-code',
+  },
 }
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  maximumScale: 5,
+  userScalable: true,
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: 'white' },
-    { media: '(prefers-color-scheme: dark)', color: 'black' },
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#000000' },
   ],
+  colorScheme: 'light dark',
 }
 
 export default function RootLayout({
@@ -66,8 +81,9 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#000000" />
       </head>
-      <body className="antialiased">
+      <body className="antialiased min-h-screen bg-background text-foreground">
         {children}
       </body>
     </html>

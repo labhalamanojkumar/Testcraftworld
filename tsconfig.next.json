@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "ES6"],
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "ES2022"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -23,8 +23,13 @@
       "@/*": ["./*"],
       "@/components/*": ["./components/*"],
       "@/lib/*": ["./lib/*"],
-      "@/styles/*": ["./styles/*"]
-    }
+      "@/styles/*": ["./styles/*"],
+      "@/app/*": ["./app/*"]
+    },
+    // Next.js 15 optimizations
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": false,
+    "noUncheckedIndexedAccess": true
   },
   "include": [
     "next-env.d.ts",
