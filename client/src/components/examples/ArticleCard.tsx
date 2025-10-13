@@ -5,7 +5,7 @@ export default function ArticleCardExample() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
       <ArticleCard
-        id="1"
+        slug="1"
         title="10 Strategies to Scale Your Startup in 2025"
         excerpt="Learn proven methods to grow your business efficiently with limited resources and maximum impact."
         category="Business"
@@ -16,7 +16,7 @@ export default function ArticleCardExample() {
         variant="vertical"
       />
       <ArticleCard
-        id="2"
+        slug="2"
         title="The Future of Remote Work: Trends and Predictions"
         excerpt="Explore how remote work is evolving and what it means for businesses and employees worldwide."
         category="Business"

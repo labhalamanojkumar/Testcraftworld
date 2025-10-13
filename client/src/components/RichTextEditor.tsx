@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Bold,
@@ -18,9 +18,54 @@ interface RichTextEditorProps {
 
 export default function RichTextEditor({ value, onChange }: RichTextEditorProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleFormat = (format: string) => {
-    console.log("Formatting:", format);
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = value.substring(start, end);
+    let replacement = selectedText;
+
+    switch (format) {
+      case "bold":
+        replacement = `**${selectedText}**`;
+        break;
+      case "italic":
+        replacement = `*${selectedText}*`;
+        break;
+      case "heading":
+        replacement = `## ${selectedText}`;
+        break;
+      case "bullet-list":
+        replacement = selectedText.split('\n').map(line => `- ${line}`).join('\n');
+        break;
+      case "ordered-list":
+        replacement = selectedText.split('\n').map((line, i) => `${i + 1}. ${line}`).join('\n');
+        break;
+      case "quote":
+        replacement = selectedText.split('\n').map(line => `> ${line}`).join('\n');
+        break;
+      case "link":
+        const url = prompt("Enter URL:");
+        if (url) replacement = `[${selectedText}](${url})`;
+        break;
+      case "image":
+        const imageUrl = prompt("Enter image URL:");
+        if (imageUrl) replacement = `![${selectedText}](${imageUrl})`;
+        break;
+    }
+
+    const newValue = value.substring(0, start) + replacement + value.substring(end);
+    onChange(newValue);
+
+    // Reset selection
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + replacement.length, start + replacement.length);
+    }, 0);
   };
 
   return (
@@ -94,6 +139,7 @@ export default function RichTextEditor({ value, onChange }: RichTextEditorProps)
         </Button>
       </div>
       <textarea
+        ref={textareaRef}
         className="w-full min-h-[400px] p-4 font-serif text-lg leading-relaxed resize-none focus:outline-none"
         placeholder="Write your article here..."
         value={value}

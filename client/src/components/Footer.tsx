@@ -11,6 +11,8 @@ const categories = [
   "Lifestyle",
   "Latest News",
   "Marketing",
+  "News",
+  "Others",
 ];
 
 export default function Footer() {
@@ -27,11 +29,15 @@ export default function Footer() {
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
-            <h3 className="text-lg font-bold mb-4">About BlogMaster</h3>
+            <div className="flex items-center space-x-2 mb-4">
+              <h3 className="text-lg font-bold relative group cursor-pointer transition-transform duration-300 hover:scale-105">
+                <span className="bg-gradient-to-r from-blue-600 to-blue-600 bg-clip-text text-transparent group-hover:from-blue-500 group-hover:to-blue-700 transition-all duration-300">Testcraft</span>
+                <span className="bg-gradient-to-r from-orange-500 to-orange-500 bg-clip-text text-transparent group-hover:from-orange-400 group-hover:to-orange-600 transition-all duration-300"> World</span>
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/30 via-orange-500/30 to-blue-500/30 opacity-0 group-hover:opacity-100 transition-all duration-500 rounded-lg blur-2xl scale-150 -z-10 animate-pulse group-hover:animate-none"></div>
+              </h3>
+            </div>
             <p className="text-sm text-muted-foreground mb-4">
-              A modern blogging platform optimized for SEO and monetization. Create
-              engaging content across Business, Design, Technology, Lifestyle, News,
-              and Marketing.
+              Testcraft World is a modern blogging platform where readers and writers connect through diverse ideas and stories. It offers rich content across Business, Design, Technology, Lifestyle, News, and Marketing. The platform inspires curiosity and keeps audiences engaged with the trends shaping today's world.
             </p>
             <div className="flex gap-2">
               <Button variant="ghost" size="icon" data-testid="link-facebook">
@@ -88,7 +94,11 @@ export default function Footer() {
         </div>
 
         <div className="mt-8 pt-8 border-t flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
-          <p>&copy; 2025 BlogMaster. All rights reserved.</p>
+          <p>&copy; 2025 <span className="relative group cursor-pointer font-medium transition-transform duration-300 hover:scale-105">
+            <span className="bg-gradient-to-r from-blue-600 to-blue-600 bg-clip-text text-transparent group-hover:from-blue-500 group-hover:to-blue-700 transition-all duration-300">Testcraft</span>
+            <span className="bg-gradient-to-r from-orange-500 to-orange-500 bg-clip-text text-transparent group-hover:from-orange-400 group-hover:to-orange-600 transition-all duration-300"> World</span>
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/30 via-orange-500/30 to-blue-500/30 opacity-0 group-hover:opacity-100 transition-all duration-500 rounded-lg blur-2xl scale-150 -z-10 animate-pulse group-hover:animate-none"></div>
+          </span>. All rights reserved.</p>
           <div className="flex gap-4">
             <Link href="/privacy" data-testid="link-privacy">Privacy Policy</Link>
             <Link href="/terms" data-testid="link-terms">Terms of Service</Link>

@@ -17,15 +17,14 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Save, Eye, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 
-const categories = [
-  "Business",
-  "Design",
-  "Technology",
-  "Lifestyle",
-  "Latest News",
-  "Marketing",
-];
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+}
 
 export default function Editor() {
   const { toast } = useToast();
@@ -37,6 +36,11 @@ export default function Editor() {
   const [metaDescription, setMetaDescription] = useState("");
   const [slug, setSlug] = useState("");
   const [focusKeyword, setFocusKeyword] = useState("");
+
+  const { data: categories } = useQuery<Category[]>({
+    queryKey: ["categories"],
+    queryFn: () => fetch("/api/categories").then(r => r.json()),
+  });
 
   const handleSaveDraft = () => {
     console.log("Saving draft...");
@@ -99,9 +103,9 @@ export default function Editor() {
                           <SelectValue placeholder="Select category" />
                         </SelectTrigger>
                         <SelectContent>
-                          {categories.map((cat) => (
-                            <SelectItem key={cat} value={cat}>
-                              {cat}
+                          {categories?.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id}>
+                              {cat.name}
                             </SelectItem>
                           ))}
                         </SelectContent>

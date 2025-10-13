@@ -5,44 +5,34 @@ import FeaturedArticles from "@/components/FeaturedArticles";
 import CategoryGrid from "@/components/CategoryGrid";
 import AdSenseZone from "@/components/AdSenseZone";
 import ArticleCard from "@/components/ArticleCard";
-import businessImage from "@assets/generated_images/Business_category_thumbnail_9ec0fa35.png";
-import marketingImage from "@assets/generated_images/Marketing_category_thumbnail_3c537bd2.png";
-import newsImage from "@assets/generated_images/Latest_News_category_thumbnail_db015d5c.png";
+import { useQuery } from "@tanstack/react-query";
 
-const recentArticles = [
-  {
-    id: "5",
-    title: "Digital Marketing Strategies for Small Businesses in 2025",
-    excerpt: "Boost your online presence with these proven marketing tactics tailored for small business owners.",
-    category: "Marketing",
-    image: marketingImage,
-    author: "Sanjay Verma",
-    date: "Jan 16, 2025",
-    readTime: "7 min read",
-  },
-  {
-    id: "6",
-    title: "Breaking: New Tech Policy Could Transform Indian Startups",
-    excerpt: "Government announces major reforms aimed at supporting innovation and entrepreneurship in the tech sector.",
-    category: "Latest News",
-    image: newsImage,
-    author: "Priya Desai",
-    date: "Jan 15, 2025",
-    readTime: "4 min read",
-  },
-  {
-    id: "7",
-    title: "Financial Planning Tips Every Entrepreneur Should Know",
-    excerpt: "Master the basics of business finance and learn how to manage cash flow effectively.",
-    category: "Business",
-    image: businessImage,
-    author: "Amit Shah",
-    date: "Jan 14, 2025",
-    readTime: "9 min read",
-  },
-];
+interface Article {
+  id: string;
+  title: string;
+  excerpt: string | null;
+  categoryId: string | null;
+  slug: string;
+  createdAt: string;
+}
 
 export default function Home() {
+  const { data: articles } = useQuery<Article[]>({
+    queryKey: ["articles"],
+    queryFn: () => fetch("/api/articles").then(r => r.json()),
+  });
+
+  const recentArticles = articles?.slice(0, 3).map((art) => ({
+    slug: art.slug,
+    title: art.title,
+    excerpt: art.excerpt || "",
+    category: "Article", // Could fetch category name
+    image: "", // Placeholder
+    author: "Author",
+    date: new Date(art.createdAt).toLocaleDateString(),
+    readTime: "5 min read",
+  })) || [];
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -63,7 +53,7 @@ export default function Home() {
             </div>
             <div className="grid grid-cols-1 gap-6 max-w-4xl mx-auto">
               {recentArticles.map((article) => (
-                <ArticleCard key={article.id} {...article} variant="horizontal" />
+                <ArticleCard key={article.slug} {...article} variant="horizontal" />
               ))}
             </div>
           </div>

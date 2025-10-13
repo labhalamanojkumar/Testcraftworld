@@ -15,6 +15,8 @@ const categories = [
   { name: "Lifestyle", image: lifestyleImage, count: 156 },
   { name: "Latest News", image: newsImage, count: 428 },
   { name: "Marketing", image: marketingImage, count: 203 },
+  { name: "News", image: newsImage, count: 150 },
+  { name: "Others", image: businessImage, count: 75 },
 ];
 
 export default function CategoryGrid() {
