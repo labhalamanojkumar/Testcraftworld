@@ -9,8 +9,9 @@ if (!process.env.DATABASE_URL) {
 // Parse the DATABASE_URL to extract connection parameters
 const url = new URL(process.env.DATABASE_URL);
 
-// Create a mysql2 pool with sensible timeouts and options
-export const pool = mysql.createPool({
+// Create an initial mysql2 pool with sensible timeouts and options.
+// This may be replaced later if we detect the DB listens on a different common port.
+export let pool = mysql.createPool({
   host: url.hostname,
   port: parseInt(url.port),
   user: url.username,
@@ -26,8 +27,34 @@ export const pool = mysql.createPool({
   },
 });
 
-// Create the drizzle database instance
-export const db = drizzle(pool, { schema, mode: "default" });
+// Create the drizzle database instance (may be re-created if pool changes)
+export let db = drizzle(pool, { schema, mode: "default" });
+
+import net from "net";
+
+function tcpCheck(host: string, port: number, timeoutMs = 5000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    let settled = false;
+    const onError = (err: any) => {
+      if (!settled) {
+        settled = true;
+        socket.destroy();
+        reject(err);
+      }
+    };
+
+    socket.setTimeout(timeoutMs, () => onError(new Error("TCP connect timeout")));
+    socket.once("error", onError);
+    socket.connect(port, host, () => {
+      if (!settled) {
+        settled = true;
+        socket.end();
+        resolve();
+      }
+    });
+  });
+}
 
 // Try to initialize DB connection with retries. Throws if unrecoverable.
 export async function initDB(options?: { retries?: number; delayMs?: number }) {
@@ -36,7 +63,41 @@ export async function initDB(options?: { retries?: number; delayMs?: number }) {
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      // Try a lightweight query to validate connection
+      // First check raw TCP connectivity to make the root cause clearer
+      const host = url.hostname;
+      const port = parseInt(url.port);
+      try {
+        await tcpCheck(host, port, 5000);
+      } catch (tcpErr) {
+        console.warn(`TCP check to ${host}:${port} failed: ${tcpErr?.message || tcpErr}`);
+        // Try common MySQL port 3306 as a fallback before failing
+        const fallbackPort = 3306;
+        try {
+          console.log(`Attempting TCP fallback to ${host}:${fallbackPort}...`);
+          await tcpCheck(host, fallbackPort, 5000);
+          console.log(`Fallback TCP to ${host}:${fallbackPort} succeeded — recreating pool to use fallback port`);
+          // Recreate pool and db to use fallback port
+          await pool.end().catch(() => {});
+          pool = mysql.createPool({
+            host,
+            port: fallbackPort,
+            user: url.username,
+            password: url.password,
+            database: url.pathname.slice(1),
+            waitForConnections: true,
+            connectionLimit: 10,
+            queueLimit: 0,
+            connectTimeout: 10000,
+            ssl: { rejectUnauthorized: false },
+          });
+          db = drizzle(pool, { schema, mode: "default" });
+        } catch (fallbackErr) {
+          console.warn(`Fallback TCP to ${host}:3306 failed: ${fallbackErr?.message || fallbackErr}`);
+          // if fallback also failed, continue to attempt using existing pool pings below
+        }
+      }
+
+      // Now try a lightweight query to validate connection
       const conn = await pool.getConnection();
       try {
         await conn.ping();
