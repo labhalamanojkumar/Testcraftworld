@@ -10,8 +10,7 @@
         "auto_deploy": true
       },
       "build": {
-        "type": "dockerfile",
-        "dockerfile_path": "Dockerfile"
+        "type": "nixpacks"
       },
       "ports": [
         {
