@@ -385,10 +385,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/analytics", async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     
-    // Check if user is superadmin
+    // Check if user is admin or superadmin
     const user = req.user as any;
-    if (user.role !== 'superadmin') {
-      return res.status(403).json({ error: "Forbidden: Superadmin access required" });
+    if (user.role !== 'admin' && user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Forbidden: Admin access required" });
     }
 
     try {
@@ -397,6 +397,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Analytics error:", error);
       res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
+  // Detailed analytics routes (superadmin only)
+  app.get("/api/analytics/detailed", async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    
+    // Check if user is admin or superadmin
+    const user = req.user as any;
+    if (user.role !== 'admin' && user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Forbidden: Admin access required" });
+    }
+
+    try {
+      const analytics = await storage.getDetailedAnalytics();
+      res.json(analytics);
+    } catch (error) {
+      console.error("Detailed analytics error:", error);
+      res.status(500).json({ error: "Failed to fetch detailed analytics" });
     }
   });
 
@@ -414,17 +433,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Increment category view count (public endpoint)
-  app.post("/api/categories/:id/view", async (req, res) => {
+  // Visitor tracking endpoints (public)
+  app.post("/api/analytics/track-visit", async (req, res) => {
     try {
-      const success = await storage.incrementCategoryViews(req.params.id);
-      if (!success) {
-        return res.status(404).json({ error: "Category not found" });
+      const {
+        ipAddress,
+        userAgent,
+        referrer,
+        url,
+        title,
+        sessionId,
+        deviceType,
+        browser,
+        os,
+        country,
+        city
+      } = req.body;
+
+      // Get or create visitor
+      let visitor = await storage.getVisitorByIp(ipAddress);
+      if (!visitor) {
+        visitor = await storage.createVisitor({
+          ipAddress,
+          userAgent,
+          referrer,
+          country,
+          city,
+          deviceType,
+          browser,
+          os,
+          firstVisit: new Date(),
+          lastVisit: new Date(),
+          visitCount: 1,
+          isUnique: true,
+        });
+      } else {
+        // Update visitor
+        await storage.updateVisitor(visitor.id, {
+          lastVisit: new Date(),
+          visitCount: (visitor.visitCount || 0) + 1,
+          isUnique: false,
+        });
       }
+
+      // Get or create session
+      let session = await storage.getSessionById(sessionId);
+      if (!session) {
+        session = await storage.createSession({
+          visitorId: visitor.id,
+          sessionId,
+          startTime: new Date(),
+          pageViews: 1,
+          bounce: false,
+          source: referrer ? 'referral' : 'direct',
+          landingPage: url,
+        });
+      } else {
+        // Update session page views
+        await storage.updateSession(session.id, {
+          pageViews: (session.pageViews || 0) + 1,
+        });
+      }
+
+      // Create page view
+      await storage.createPageView({
+        sessionId: session.id,
+        visitorId: visitor.id,
+        url,
+        title,
+        timestamp: new Date(),
+      });
+
       res.json({ success: true });
     } catch (error) {
-      console.error("Increment category view error:", error);
-      res.status(500).json({ error: "Failed to increment view count" });
+      console.error("Track visit error:", error);
+      res.status(500).json({ error: "Failed to track visit" });
+    }
+  });
+
+  // Update session duration
+  app.post("/api/analytics/update-session", async (req, res) => {
+    try {
+      const { sessionId, duration, pageViews } = req.body;
+
+      const session = await storage.getSessionById(sessionId);
+      if (session) {
+        await storage.updateSession(session.id, {
+          duration,
+          pageViews,
+          endTime: new Date(),
+          bounce: pageViews <= 1,
+        });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Update session error:", error);
+      res.status(500).json({ error: "Failed to update session" });
     }
   });
 

@@ -14,7 +14,8 @@ import Dashboard from "@/components/Dashboard";
 import RichTextEditor from "@/components/RichTextEditor";
 import SEOFields from "@/components/SEOFields";
 import Header from "@/components/Header";
-import { Save, Eye, Send, Plus, LayoutDashboard, FileText, Users } from "lucide-react";
+import AnalyticsDashboard from "@/components/AnalyticsDashboard";
+import { Save, Eye, Send, Plus, LayoutDashboard, FileText, Users, BarChart3 } from "lucide-react";
 
 interface User {
   id: string;
@@ -61,7 +62,7 @@ export default function Admin() {
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { username: string; password: string }) => {
-      const res = await fetch("/api/login", {
+      const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(credentials),
@@ -147,10 +148,14 @@ export default function Admin() {
       <Header />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <LayoutDashboard className="h-4 w-4" />
               Dashboard
+            </TabsTrigger>
+            <TabsTrigger value="analytics" className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Analytics
             </TabsTrigger>
             <TabsTrigger value="articles" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
@@ -168,6 +173,10 @@ export default function Admin() {
 
           <TabsContent value="dashboard">
             <Dashboard />
+          </TabsContent>
+
+          <TabsContent value="analytics">
+            <AnalyticsDashboard />
           </TabsContent>
 
           <TabsContent value="articles">

@@ -22,7 +22,10 @@
       ],
       "environment": {
         "NODE_ENV": "production",
-        "PORT": "${{PORT}}"
+        "PORT": "${{PORT}}",
+        "SESSION_SECRET": "${{SESSION_SECRET}}",
+        "SUPER_ADMIN_USERNAME": "${{SUPER_ADMIN_USERNAME}}",
+        "SUPER_ADMIN_PASSWORD": "${{SUPER_ADMIN_PASSWORD}}"
       },
       "healthcheck": {
         "type": "http",

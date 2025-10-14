@@ -110,3 +110,6 @@ build/
 .netlify/
 .firebase/
 .firestore/
+
+# Test files
+cookies.txt

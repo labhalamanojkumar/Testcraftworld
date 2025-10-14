@@ -42,6 +42,49 @@ export const articles = mysqlTable("articles", {
   updatedAt: datetime("updated_at").default(sql`NOW()`),
 });
 
+// Analytics tables for visitor tracking
+export const visitors = mysqlTable("visitors", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
+  ipAddress: varchar("ip_address", { length: 45 }), // Support both IPv4 and IPv6
+  userAgent: text("user_agent"),
+  referrer: text("referrer"),
+  country: varchar("country", { length: 100 }),
+  city: varchar("city", { length: 100 }),
+  deviceType: varchar("device_type", { length: 50 }), // desktop, mobile, tablet
+  browser: varchar("browser", { length: 100 }),
+  os: varchar("os", { length: 100 }),
+  firstVisit: datetime("first_visit").default(sql`NOW()`),
+  lastVisit: datetime("last_visit").default(sql`NOW()`),
+  visitCount: int("visit_count").default(1),
+  isUnique: boolean("is_unique").default(true),
+});
+
+export const sessions = mysqlTable("sessions", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
+  visitorId: varchar("visitor_id", { length: 36 }).references(() => visitors.id),
+  sessionId: varchar("session_id", { length: 255 }).notNull(),
+  startTime: datetime("start_time").default(sql`NOW()`),
+  endTime: datetime("end_time"),
+  duration: int("duration"), // Duration in seconds
+  pageViews: int("page_views").default(1),
+  bounce: boolean("bounce").default(false), // Single page session
+  source: varchar("source", { length: 255 }), // organic, direct, social, referral
+  campaign: varchar("campaign", { length: 255 }),
+  landingPage: text("landing_page"),
+});
+
+export const pageViews = mysqlTable("page_views", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
+  sessionId: varchar("session_id", { length: 36 }).references(() => sessions.id),
+  visitorId: varchar("visitor_id", { length: 36 }).references(() => visitors.id),
+  url: text("url").notNull(),
+  title: text("title"),
+  timestamp: datetime("timestamp").default(sql`NOW()`),
+  timeOnPage: int("time_on_page"), // Time spent on page in seconds
+  articleId: varchar("article_id", { length: 36 }).references(() => articles.id),
+  categoryId: varchar("category_id", { length: 36 }).references(() => categories.id),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   email: true,
@@ -73,9 +116,54 @@ export const insertArticleSchema = createInsertSchema(articles).pick({
   viewCount: true,
 });
 
+export const insertVisitorSchema = createInsertSchema(visitors).pick({
+  ipAddress: true,
+  userAgent: true,
+  referrer: true,
+  country: true,
+  city: true,
+  deviceType: true,
+  browser: true,
+  os: true,
+  firstVisit: true,
+  lastVisit: true,
+  visitCount: true,
+  isUnique: true,
+});
+
+export const insertSessionSchema = createInsertSchema(sessions).pick({
+  visitorId: true,
+  sessionId: true,
+  startTime: true,
+  endTime: true,
+  duration: true,
+  pageViews: true,
+  bounce: true,
+  source: true,
+  campaign: true,
+  landingPage: true,
+});
+
+export const insertPageViewSchema = createInsertSchema(pageViews).pick({
+  sessionId: true,
+  visitorId: true,
+  url: true,
+  title: true,
+  timestamp: true,
+  timeOnPage: true,
+  articleId: true,
+  categoryId: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type Category = typeof categories.$inferSelect;
 export type InsertArticle = z.infer<typeof insertArticleSchema>;
 export type Article = typeof articles.$inferSelect;
+export type InsertVisitor = z.infer<typeof insertVisitorSchema>;
+export type Visitor = typeof visitors.$inferSelect;
+export type InsertSession = z.infer<typeof insertSessionSchema>;
+export type Session = typeof sessions.$inferSelect;
+export type InsertPageView = z.infer<typeof insertPageViewSchema>;
+export type PageView = typeof pageViews.$inferSelect;

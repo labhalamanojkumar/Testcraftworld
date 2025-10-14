@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type Category, type InsertCategory, type Article, type InsertArticle } from "@shared/schema";
+import { type User, type InsertUser, type Category, type InsertCategory, type Article, type InsertArticle, type Visitor, type InsertVisitor, type Session, type InsertSession, type PageView, type InsertPageView } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, categories, articles } from "../shared/schema";
+import { users, categories, articles, visitors, sessions, pageViews } from "../shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -33,17 +33,49 @@ export interface IStorage {
     topArticles: Array<{ id: string; title: string; viewCount: number; slug: string }>;
     topCategories: Array<{ id: string; name: string; viewCount: number; slug: string }>;
   }>;
+  // Analytics methods
+  createVisitor(visitor: InsertVisitor): Promise<Visitor>;
+  getVisitorByIp(ipAddress: string): Promise<Visitor | undefined>;
+  updateVisitor(id: string, updates: Partial<InsertVisitor>): Promise<Visitor | undefined>;
+  createSession(session: InsertSession): Promise<Session>;
+  getSessionById(sessionId: string): Promise<Session | undefined>;
+  updateSession(id: string, updates: Partial<InsertSession>): Promise<Session | undefined>;
+  createPageView(pageView: InsertPageView): Promise<PageView>;
+  getDetailedAnalytics(): Promise<{
+    totalVisitors: number;
+    uniqueVisitors: number;
+    totalSessions: number;
+    totalPageViews: number;
+    avgSessionDuration: number;
+    bounceRate: number;
+    topPages: Array<{ url: string; title: string; views: number }>;
+    trafficSources: Array<{ source: string; sessions: number; percentage: number }>;
+    deviceStats: Array<{ device: string; visitors: number; percentage: number }>;
+    realtimeData: {
+      activeUsers: number;
+      todayViews: number;
+      todayVisitors: number;
+    };
+    hourlyStats: Array<{ hour: number; views: number; visitors: number }>;
+    dailyStats: Array<{ date: string; views: number; visitors: number; sessions: number }>;
+  }>;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<string, User>;
   private categories: Map<string, Category>;
   private articles: Map<string, Article>;
+  private visitors: Map<string, Visitor>;
+  private sessions: Map<string, Session>;
+  private pageViews: Map<string, PageView>;
 
   constructor() {
     this.users = new Map();
     this.categories = new Map();
     this.articles = new Map();
+    this.visitors = new Map();
+    this.sessions = new Map();
+    this.pageViews = new Map();
     // Seed some data
     this.seedData();
   }
@@ -243,6 +275,233 @@ export class MemStorage implements IStorage {
       totalViews,
       topArticles,
       topCategories,
+    };
+  }
+
+  // Analytics methods
+  async createVisitor(insertVisitor: InsertVisitor): Promise<Visitor> {
+    const id = randomUUID();
+    const visitor: Visitor = {
+      ...insertVisitor,
+      id,
+      firstVisit: insertVisitor.firstVisit || new Date(),
+      lastVisit: insertVisitor.lastVisit || new Date(),
+      visitCount: insertVisitor.visitCount || 1,
+      isUnique: insertVisitor.isUnique ?? true,
+      country: insertVisitor.country || null,
+      city: insertVisitor.city || null,
+      deviceType: insertVisitor.deviceType || null,
+      browser: insertVisitor.browser || null,
+      os: insertVisitor.os || null,
+      ipAddress: insertVisitor.ipAddress || null,
+      userAgent: insertVisitor.userAgent || null,
+      referrer: insertVisitor.referrer || null,
+    };
+    this.visitors.set(id, visitor);
+    return visitor;
+  }
+
+  async getVisitorByIp(ipAddress: string): Promise<Visitor | undefined> {
+    return Array.from(this.visitors.values()).find(v => v.ipAddress === ipAddress);
+  }
+
+  async updateVisitor(id: string, updates: Partial<InsertVisitor>): Promise<Visitor | undefined> {
+    const visitor = this.visitors.get(id);
+    if (!visitor) return undefined;
+    const updated = { ...visitor, ...updates };
+    this.visitors.set(id, updated);
+    return updated;
+  }
+
+  async createSession(insertSession: InsertSession): Promise<Session> {
+    const id = randomUUID();
+    const session: Session = {
+      ...insertSession,
+      id,
+      startTime: insertSession.startTime || new Date(),
+      pageViews: insertSession.pageViews || 1,
+      bounce: insertSession.bounce ?? false,
+      source: insertSession.source || null,
+      duration: insertSession.duration || null,
+      visitorId: insertSession.visitorId || null,
+      endTime: insertSession.endTime || null,
+      campaign: insertSession.campaign || null,
+      landingPage: insertSession.landingPage || null,
+    };
+    this.sessions.set(id, session);
+    return session;
+  }
+
+  async getSessionById(sessionId: string): Promise<Session | undefined> {
+    return Array.from(this.sessions.values()).find(s => s.sessionId === sessionId);
+  }
+
+  async updateSession(id: string, updates: Partial<InsertSession>): Promise<Session | undefined> {
+    const session = this.sessions.get(id);
+    if (!session) return undefined;
+    const updated = { ...session, ...updates };
+    this.sessions.set(id, updated);
+    return updated;
+  }
+
+  async createPageView(insertPageView: InsertPageView): Promise<PageView> {
+    const id = randomUUID();
+    const pageView: PageView = {
+      ...insertPageView,
+      id,
+      timestamp: insertPageView.timestamp || new Date(),
+      title: insertPageView.title || null,
+      categoryId: insertPageView.categoryId || null,
+      visitorId: insertPageView.visitorId || null,
+      sessionId: insertPageView.sessionId || null,
+      timeOnPage: insertPageView.timeOnPage || null,
+      articleId: insertPageView.articleId || null,
+    };
+    this.pageViews.set(id, pageView);
+    return pageView;
+  }
+
+  async getDetailedAnalytics(): Promise<{
+    totalVisitors: number;
+    uniqueVisitors: number;
+    totalSessions: number;
+    totalPageViews: number;
+    avgSessionDuration: number;
+    bounceRate: number;
+    topPages: Array<{ url: string; title: string; views: number }>;
+    trafficSources: Array<{ source: string; sessions: number; percentage: number }>;
+    deviceStats: Array<{ device: string; visitors: number; percentage: number }>;
+    realtimeData: { activeUsers: number; todayViews: number; todayVisitors: number };
+    hourlyStats: Array<{ hour: number; views: number; visitors: number }>;
+    dailyStats: Array<{ date: string; views: number; visitors: number; sessions: number }>;
+  }> {
+    const allVisitors = Array.from(this.visitors.values());
+    const allSessions = Array.from(this.sessions.values());
+    const allPageViews = Array.from(this.pageViews.values());
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
+
+    // Calculate metrics
+    const totalVisitors = allVisitors.length;
+    const uniqueVisitors = allVisitors.filter(v => v.isUnique).length;
+    const totalSessions = allSessions.length;
+    const totalPageViews = allPageViews.length;
+
+    const completedSessions = allSessions.filter(s => s.duration && s.duration > 0);
+    const avgSessionDuration = completedSessions.length > 0
+      ? completedSessions.reduce((sum, s) => sum + (s.duration || 0), 0) / completedSessions.length
+      : 0;
+
+    const bounceRate = totalSessions > 0 ? (allSessions.filter(s => s.bounce).length / totalSessions) * 100 : 0;
+
+    // Top pages
+    const pageStats = new Map<string, { title: string; views: number }>();
+    allPageViews.forEach(pv => {
+      const key = pv.url;
+      const existing = pageStats.get(key) || { title: pv.title || '', views: 0 };
+      pageStats.set(key, { title: existing.title, views: existing.views + 1 });
+    });
+    const topPages = Array.from(pageStats.entries())
+      .sort((a, b) => b[1].views - a[1].views)
+      .slice(0, 10)
+      .map(([url, stats]) => ({ url, title: stats.title, views: stats.views }));
+
+    // Traffic sources
+    const sourceStats = new Map<string, number>();
+    allSessions.forEach(s => {
+      const source = s.source || 'direct';
+      sourceStats.set(source, (sourceStats.get(source) || 0) + 1);
+    });
+    const trafficSources = Array.from(sourceStats.entries())
+      .map(([source, sessions]) => ({
+        source,
+        sessions,
+        percentage: totalSessions > 0 ? (sessions / totalSessions) * 100 : 0
+      }))
+      .sort((a, b) => b.sessions - a.sessions);
+
+    // Device stats
+    const deviceStatsMap = new Map<string, number>();
+    allVisitors.forEach(v => {
+      const device = v.deviceType || 'unknown';
+      deviceStatsMap.set(device, (deviceStatsMap.get(device) || 0) + 1);
+    });
+    const deviceStats = Array.from(deviceStatsMap.entries())
+      .map(([device, visitors]) => ({
+        device,
+        visitors,
+        percentage: totalVisitors > 0 ? (visitors / totalVisitors) * 100 : 0
+      }))
+      .sort((a, b) => b.visitors - a.visitors);
+
+    // Real-time data (last hour)
+    const activeUsers = allSessions.filter(s => s.startTime && new Date(s.startTime) > lastHour).length;
+    const todayViews = allPageViews.filter(pv => pv.timestamp && new Date(pv.timestamp) >= today).length;
+    const todayVisitors = allVisitors.filter(v => v.lastVisit && new Date(v.lastVisit) >= today).length;
+
+    // Hourly stats (last 24 hours)
+    const hourlyStats = [];
+    for (let i = 23; i >= 0; i--) {
+      const hourStart = new Date(now.getTime() - i * 60 * 60 * 1000);
+      const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000);
+
+      const hourViews = allPageViews.filter(pv =>
+        pv.timestamp && new Date(pv.timestamp) >= hourStart && new Date(pv.timestamp) < hourEnd
+      ).length;
+
+      const hourVisitors = allVisitors.filter(v =>
+        v.lastVisit && new Date(v.lastVisit) >= hourStart && new Date(v.lastVisit) < hourEnd
+      ).length;
+
+      hourlyStats.push({
+        hour: hourStart.getHours(),
+        views: hourViews,
+        visitors: hourVisitors
+      });
+    }
+
+    // Daily stats (last 30 days)
+    const dailyStats = [];
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const dateEnd = new Date(dateStart.getTime() + 24 * 60 * 60 * 1000);
+
+      const dayViews = allPageViews.filter(pv =>
+        pv.timestamp && new Date(pv.timestamp) >= dateStart && new Date(pv.timestamp) < dateEnd
+      ).length;
+
+      const dayVisitors = allVisitors.filter(v =>
+        v.lastVisit && new Date(v.lastVisit) >= dateStart && new Date(v.lastVisit) < dateEnd
+      ).length;
+
+      const daySessions = allSessions.filter(s =>
+        s.startTime && new Date(s.startTime) >= dateStart && new Date(s.startTime) < dateEnd
+      ).length;
+
+      dailyStats.push({
+        date: dateStart.toISOString().split('T')[0],
+        views: dayViews,
+        visitors: dayVisitors,
+        sessions: daySessions
+      });
+    }
+
+    return {
+      totalVisitors,
+      uniqueVisitors,
+      totalSessions,
+      totalPageViews,
+      avgSessionDuration,
+      bounceRate,
+      topPages,
+      trafficSources,
+      deviceStats,
+      realtimeData: { activeUsers, todayViews, todayVisitors },
+      hourlyStats,
+      dailyStats,
     };
   }
 }
@@ -461,6 +720,283 @@ export class DbStorage implements IStorage {
         viewCount: c.viewCount || 0,
         slug: c.slug,
       })),
+    };
+  }
+
+  // Analytics methods
+  async createVisitor(insertVisitor: InsertVisitor): Promise<Visitor> {
+    const id = randomUUID();
+    const visitor: Visitor = {
+      ...insertVisitor,
+      id,
+      firstVisit: insertVisitor.firstVisit || new Date(),
+      lastVisit: insertVisitor.lastVisit || new Date(),
+      visitCount: insertVisitor.visitCount || 1,
+      isUnique: insertVisitor.isUnique ?? true,
+      ipAddress: insertVisitor.ipAddress || null,
+      userAgent: insertVisitor.userAgent || null,
+      referrer: insertVisitor.referrer || null,
+      country: insertVisitor.country || null,
+      city: insertVisitor.city || null,
+      deviceType: insertVisitor.deviceType || null,
+      browser: insertVisitor.browser || null,
+      os: insertVisitor.os || null,
+    };
+
+    await db.insert(visitors).values(visitor);
+    return visitor;
+  }
+
+  async getVisitorByIp(ipAddress: string): Promise<Visitor | undefined> {
+    const result = await db.select().from(visitors).where(eq(visitors.ipAddress, ipAddress)).limit(1);
+    return result[0];
+  }
+
+  async updateVisitor(id: string, updates: Partial<InsertVisitor>): Promise<Visitor | undefined> {
+    await db
+      .update(visitors)
+      .set({ ...updates, lastVisit: new Date() })
+      .where(eq(visitors.id, id));
+
+    return await this.getVisitorById(id);
+  }
+
+  async getVisitorById(id: string): Promise<Visitor | undefined> {
+    const result = await db.select().from(visitors).where(eq(visitors.id, id)).limit(1);
+    return result[0];
+  }
+
+  async createSession(insertSession: InsertSession): Promise<Session> {
+    const id = randomUUID();
+    const session: Session = {
+      ...insertSession,
+      id,
+      startTime: insertSession.startTime || new Date(),
+      pageViews: insertSession.pageViews || 1,
+      bounce: insertSession.bounce ?? false,
+      source: insertSession.source || null,
+      duration: insertSession.duration || null,
+      visitorId: insertSession.visitorId || null,
+      endTime: insertSession.endTime || null,
+      campaign: insertSession.campaign || null,
+      landingPage: insertSession.landingPage || null,
+    };
+
+    await db.insert(sessions).values(session);
+    return session;
+  }
+
+  async getSessionById(sessionId: string): Promise<Session | undefined> {
+    const result = await db.select().from(sessions).where(eq(sessions.sessionId, sessionId)).limit(1);
+    return result[0];
+  }
+
+  async updateSession(id: string, updates: Partial<InsertSession>): Promise<Session | undefined> {
+    await db
+      .update(sessions)
+      .set(updates)
+      .where(eq(sessions.id, id));
+
+    return await this.getSessionByIdFromDb(id);
+  }
+
+  async getSessionByIdFromDb(id: string): Promise<Session | undefined> {
+    const result = await db.select().from(sessions).where(eq(sessions.id, id)).limit(1);
+    return result[0];
+  }
+
+  async createPageView(insertPageView: InsertPageView): Promise<PageView> {
+    const id = randomUUID();
+    const pageView: PageView = {
+      ...insertPageView,
+      id,
+      timestamp: insertPageView.timestamp || new Date(),
+      title: insertPageView.title || null,
+      categoryId: insertPageView.categoryId || null,
+      visitorId: insertPageView.visitorId || null,
+      sessionId: insertPageView.sessionId || null,
+      timeOnPage: insertPageView.timeOnPage || null,
+      articleId: insertPageView.articleId || null,
+    };
+
+    await db.insert(pageViews).values(pageView);
+    return pageView;
+  }
+
+  async getDetailedAnalytics(): Promise<{
+    totalVisitors: number;
+    uniqueVisitors: number;
+    totalSessions: number;
+    totalPageViews: number;
+    avgSessionDuration: number;
+    bounceRate: number;
+    topPages: Array<{ url: string; title: string; views: number }>;
+    trafficSources: Array<{ source: string; sessions: number; percentage: number }>;
+    deviceStats: Array<{ device: string; visitors: number; percentage: number }>;
+    realtimeData: { activeUsers: number; todayViews: number; todayVisitors: number };
+    hourlyStats: Array<{ hour: number; views: number; visitors: number }>;
+    dailyStats: Array<{ date: string; views: number; visitors: number; sessions: number }>;
+  }> {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
+
+    // Get total counts
+    const [visitorCounts] = await db
+      .select({
+        total: sql<number>`count(*)`,
+        unique: sql<number>`sum(case when ${visitors.isUnique} = 1 then 1 else 0 end)`,
+      })
+      .from(visitors);
+
+    const [sessionCounts] = await db
+      .select({
+        total: sql<number>`count(*)`,
+        avgDuration: sql<number>`avg(${sessions.duration})`,
+        bounceCount: sql<number>`sum(case when ${sessions.bounce} = 1 then 1 else 0 end)`,
+      })
+      .from(sessions);
+
+    const [pageViewCounts] = await db
+      .select({ total: sql<number>`count(*)` })
+      .from(pageViews);
+
+    // Top pages
+    const topPagesResult = await db
+      .select({
+        url: pageViews.url,
+        title: pageViews.title,
+        views: sql<number>`count(*)`,
+      })
+      .from(pageViews)
+      .groupBy(pageViews.url, pageViews.title)
+      .orderBy(sql`count(*) desc`)
+      .limit(10);
+
+    // Traffic sources
+    const trafficSourcesResult = await db
+      .select({
+        source: sessions.source,
+        sessions: sql<number>`count(*)`,
+      })
+      .from(sessions)
+      .groupBy(sessions.source)
+      .orderBy(sql`count(*) desc`);
+
+    const totalSessions = sessionCounts?.total || 0;
+    const trafficSources = trafficSourcesResult.map(row => ({
+      source: row.source || 'direct',
+      sessions: row.sessions,
+      percentage: totalSessions > 0 ? (row.sessions / totalSessions) * 100 : 0,
+    }));
+
+    // Device stats
+    const deviceStatsResult = await db
+      .select({
+        device: visitors.deviceType,
+        visitors: sql<number>`count(*)`,
+      })
+      .from(visitors)
+      .groupBy(visitors.deviceType)
+      .orderBy(sql`count(*) desc`);
+
+    const totalVisitors = visitorCounts?.total || 0;
+    const deviceStats = deviceStatsResult.map(row => ({
+      device: row.device || 'unknown',
+      visitors: row.visitors,
+      percentage: totalVisitors > 0 ? (row.visitors / totalVisitors) * 100 : 0,
+    }));
+
+    // Real-time data
+    const [activeUsers] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(sessions)
+      .where(sql`${sessions.startTime} > ${lastHour}`);
+
+    const [todayViews] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(pageViews)
+      .where(sql`${pageViews.timestamp} >= ${today}`);
+
+    const [todayVisitors] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(visitors)
+      .where(sql`${visitors.lastVisit} >= ${today}`);
+
+    // Hourly stats (last 24 hours)
+    const hourlyStats = [];
+    for (let i = 23; i >= 0; i--) {
+      const hourStart = new Date(now.getTime() - i * 60 * 60 * 1000);
+      const hourEnd = new Date(hourStart.getTime() + 60 * 60 * 1000);
+
+      const [hourViews] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(pageViews)
+        .where(sql`${pageViews.timestamp} >= ${hourStart} and ${pageViews.timestamp} < ${hourEnd}`);
+
+      const [hourVisitors] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(visitors)
+        .where(sql`${visitors.lastVisit} >= ${hourStart} and ${visitors.lastVisit} < ${hourEnd}`);
+
+      hourlyStats.push({
+        hour: hourStart.getHours(),
+        views: hourViews?.count || 0,
+        visitors: hourVisitors?.count || 0,
+      });
+    }
+
+    // Daily stats (last 30 days)
+    const dailyStats = [];
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const dateEnd = new Date(dateStart.getTime() + 24 * 60 * 60 * 1000);
+
+      const [dayViews] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(pageViews)
+        .where(sql`${pageViews.timestamp} >= ${dateStart} and ${pageViews.timestamp} < ${dateEnd}`);
+
+      const [dayVisitors] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(visitors)
+        .where(sql`${visitors.lastVisit} >= ${dateStart} and ${visitors.lastVisit} < ${dateEnd}`);
+
+      const [daySessions] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(sessions)
+        .where(sql`${sessions.startTime} >= ${dateStart} and ${sessions.startTime} < ${dateEnd}`);
+
+      dailyStats.push({
+        date: dateStart.toISOString().split('T')[0],
+        views: dayViews?.count || 0,
+        visitors: dayVisitors?.count || 0,
+        sessions: daySessions?.count || 0,
+      });
+    }
+
+    return {
+      totalVisitors: visitorCounts?.total || 0,
+      uniqueVisitors: visitorCounts?.unique || 0,
+      totalSessions: sessionCounts?.total || 0,
+      totalPageViews: pageViewCounts?.total || 0,
+      avgSessionDuration: sessionCounts?.avgDuration || 0,
+      bounceRate: totalSessions > 0 ? ((sessionCounts?.bounceCount || 0) / totalSessions) * 100 : 0,
+      topPages: topPagesResult.map(row => ({
+        url: row.url,
+        title: row.title || '',
+        views: row.views,
+      })),
+      trafficSources,
+      deviceStats,
+      realtimeData: {
+        activeUsers: activeUsers?.count || 0,
+        todayViews: todayViews?.count || 0,
+        todayVisitors: todayVisitors?.count || 0,
+      },
+      hourlyStats,
+      dailyStats,
     };
   }
 }

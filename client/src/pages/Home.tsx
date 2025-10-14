@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 interface Article {
   id: string;
   title: string;
+  content: string;
   excerpt: string | null;
   categoryId: string | null;
   slug: string;
@@ -34,6 +35,26 @@ export default function Home() {
     queryFn: () => fetch("/api/categories").then(r => r.json()),
   });
 
+  // Function to extract first image from HTML content
+  const extractFirstImage = (htmlContent: string): string => {
+    if (!htmlContent) return "https://via.placeholder.com/400x250/6366f1/ffffff?text=No+Image"; // Default placeholder
+    
+    // Create a temporary DOM element to parse HTML
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+    
+    // Find the first img element
+    const firstImg = tempDiv.querySelector('img');
+    if (firstImg && firstImg.src) {
+      // If it's a relative URL (starts with /), it's an uploaded image
+      // If it's an absolute URL, return as is
+      return firstImg.src;
+    }
+    
+    // If no image found, return default placeholder
+    return "https://via.placeholder.com/400x250/6366f1/ffffff?text=No+Image";
+  };
+
   const recentArticles = articles?.slice(0, 3).map((art) => {
     const category = categories?.find(c => c.id === art.categoryId);
     return {
@@ -42,7 +63,7 @@ export default function Home() {
       excerpt: art.excerpt || "",
       category: category?.name || "Uncategorized",
       categorySlug: category?.slug,
-      image: "", // Placeholder
+      image: extractFirstImage(art.content), // Extract first image from content
       author: "Author",
       date: new Date(art.createdAt).toLocaleDateString(),
       readTime: "5 min read",

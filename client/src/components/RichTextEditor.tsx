@@ -16,6 +16,7 @@ import {
   Type,
   Upload,
   Palette,
+  Globe,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -30,6 +31,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface RichTextEditorProps {
   value: string;
@@ -39,6 +49,8 @@ interface RichTextEditorProps {
 export default function RichTextEditor({ value, onChange }: RichTextEditorProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [selectedFont, setSelectedFont] = useState('Inter');
+  const [imageUrlDialogOpen, setImageUrlDialogOpen] = useState(false);
+  const [imageUrl, setImageUrl] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const quillRef = useRef<ReactQuill>(null);
   const { toast } = useToast();
@@ -86,6 +98,33 @@ export default function RichTextEditor({ value, onChange }: RichTextEditorProps)
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleImageUrlInsert = () => {
+    if (!imageUrl.trim()) {
+      toast({
+        title: "Invalid URL",
+        description: "Please enter a valid image URL.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Insert image at cursor position
+    const quill = quillRef.current?.getEditor();
+    if (quill) {
+      const range = quill.getSelection(true);
+      quill.insertEmbed(range.index, 'image', imageUrl.trim());
+      quill.setSelection(range.index + 1, 0);
+    }
+
+    setImageUrl('');
+    setImageUrlDialogOpen(false);
+
+    toast({
+      title: "Image Inserted",
+      description: "Image has been inserted into your content.",
+    });
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -318,12 +357,14 @@ export default function RichTextEditor({ value, onChange }: RichTextEditorProps)
         >
           <LinkIcon className="h-4 w-4" />
         </Button>
+        
+        {/* Image Upload */}
         <Button
           variant="ghost"
           size="sm"
           onClick={() => fileInputRef.current?.click()}
           disabled={isUploading}
-          title="Insert Image"
+          title="Upload Image"
         >
           {isUploading ? (
             <Upload className="h-4 w-4 animate-spin" />
@@ -331,6 +372,51 @@ export default function RichTextEditor({ value, onChange }: RichTextEditorProps)
             <ImageIcon className="h-4 w-4" />
           )}
         </Button>
+
+        {/* Image URL */}
+        <Dialog open={imageUrlDialogOpen} onOpenChange={setImageUrlDialogOpen}>
+          <DialogTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Insert Image by URL"
+            >
+              <Globe className="h-4 w-4" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Insert Image by URL</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="image-url">Image URL</Label>
+                <Input
+                  id="image-url"
+                  type="url"
+                  placeholder="https://example.com/image.jpg"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  className="mt-2"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setImageUrl('');
+                    setImageUrlDialogOpen(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleImageUrlInsert}>
+                  Insert Image
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Color Picker */}
         <Popover>
