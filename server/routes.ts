@@ -12,7 +12,10 @@ import path from "path";
 import fs from "fs";
 
 const require = createRequire(import.meta.url);
-const MySQLStore = require('connect-mysql-session')(session);
+const MySQLStore = require('express-mysql-session')(session);
+
+// Parse DATABASE_URL for session store
+const dbUrl = new URL(process.env.DATABASE_URL || 'mysql://root:password@localhost:3306/default');
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -44,7 +47,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     resave: false,
     saveUninitialized: false,
     store: new MySQLStore({
-      connection: pool,
+      host: dbUrl.hostname,
+      port: parseInt(dbUrl.port) || 3306,
+      user: dbUrl.username,
+      password: dbUrl.password,
+      database: dbUrl.pathname.slice(1), // Remove leading slash
       clearExpired: true,
       checkExpirationInterval: 900000, // 15 minutes
       expiration: 86400000, // 1 day
