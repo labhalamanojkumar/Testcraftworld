@@ -18,24 +18,96 @@ const MySQLStore = require('express-mysql-session')(session);
 // Parse DATABASE_URL for session store
 const dbUrl = new URL(process.env.DATABASE_URL || 'mysql://root:password@localhost:3306/default');
 
+// Normalize host to prefer IPv4 localhost when appropriate (avoid ::1 when MySQL is IPv4-only)
+function normalizeHost(hostname: string) {
+  // allow an explicit override via DB_HOST env var
+  const envHost = process.env.DB_HOST;
+  if (envHost) return envHost;
+
+  if (!hostname) return '127.0.0.1';
+
+  // If hostname is localhost or resolves to IPv6 loopback, prefer 127.0.0.1
+  if (hostname === 'localhost' || hostname === '::1' || hostname === '[::1]') {
+    return '127.0.0.1';
+  }
+
+  return hostname;
+}
+
 // Create MySQL connection config for session store
 const mysqlConfig = {
-  host: dbUrl.hostname,
+  host: normalizeHost(dbUrl.hostname),
   port: parseInt(dbUrl.port) || 3306,
   user: dbUrl.username,
   password: dbUrl.password,
   database: dbUrl.pathname.slice(1),
-  ssl: process.env.NODE_ENV === 'production' ? {
-    rejectUnauthorized: false, // Allow self-signed certificates in production
-  } : undefined,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
 };
 
-// Create a separate connection pool for session store
-const sessionPool = mysql.createPool({
-  ...mysqlConfig,
-  waitForConnections: true,
-  connectionLimit: 5,
-  queueLimit: 0,
+// Helper to create a session pool with the current config
+function createSessionPool(cfg: any) {
+  return mysql.createPool({
+    ...cfg,
+    waitForConnections: true,
+    connectionLimit: 5,
+    queueLimit: 0,
+  });
+}
+
+let sessionPool = createSessionPool(mysqlConfig);
+
+// Try pinging sessionPool; if it fails with ECONNREFUSED and host is 127.0.0.1, attempt an alternate
+async function ensureSessionPool() {
+  try {
+    const conn = await sessionPool.getConnection();
+    try {
+      await conn.ping();
+    } finally {
+      conn.release();
+    }
+    console.log('Session DB pool connected');
+    return;
+  } catch (err: any) {
+    console.warn('Session pool ping failed:', err && err.code ? `${err.code} - ${err.message}` : err);
+
+    // If we attempted to connect to IPv6 loopback or an address that refused and hostname wasn't explicit, try 127.0.0.1
+    if (mysqlConfig.host === '::1' || mysqlConfig.host === '[::1]' || mysqlConfig.host === 'localhost') {
+      console.log('Retrying session DB pool with 127.0.0.1');
+      mysqlConfig.host = '127.0.0.1';
+      sessionPool = createSessionPool(mysqlConfig);
+      try {
+        const conn = await sessionPool.getConnection();
+        try { await conn.ping(); } finally { conn.release(); }
+        console.log('Session DB pool connected via 127.0.0.1');
+        return;
+      } catch (err2: any) {
+        console.error('Retry to 127.0.0.1 failed:', err2 && err2.code ? `${err2.code} - ${err2.message}` : err2);
+      }
+    }
+
+    // As a last resort, if DB_URL contains an explicit host param or a fallback port, try port 3306
+    if (mysqlConfig.port !== 3306) {
+      console.log('Retrying session DB pool with port 3306');
+      mysqlConfig.port = 3306;
+      sessionPool = createSessionPool(mysqlConfig);
+      try {
+        const conn = await sessionPool.getConnection();
+        try { await conn.ping(); } finally { conn.release(); }
+        console.log('Session DB pool connected via port 3306');
+        return;
+      } catch (err3: any) {
+        console.error('Retry to port 3306 failed:', err3 && err3.code ? `${err3.code} - ${err3.message}` : err3);
+      }
+    }
+
+    // If we reach here, session pool could not be established; rethrow to allow higher-level handling
+    throw err;
+  }
+}
+
+// Ensure pool immediately (but do not block module load; caller can await before starting server if desired)
+ensureSessionPool().catch((e) => {
+  console.error('Failed to establish session DB pool on startup:', e && e.code ? `${e.code} - ${e.message}` : e);
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
