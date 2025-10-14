@@ -9,6 +9,10 @@ if (!process.env.DATABASE_URL) {
 // Parse the DATABASE_URL to extract connection parameters
 const url = new URL(process.env.DATABASE_URL);
 
+// Detect SSL requirement from the URL query params (e.g. ?ssl-mode=REQUIRED)
+const sslMode = (url.searchParams.get('ssl-mode') || url.searchParams.get('sslmode') || '').toLowerCase();
+const useSsl = sslMode === 'required' || sslMode === 'verify_ca' || sslMode === 'verify_identity';
+
 // Normalize host to prefer IPv4 localhost when appropriate (avoid ::1 when MySQL is IPv4-only)
 function normalizeHost(hostname: string) {
   // allow an explicit override via DB_HOST env var
@@ -29,7 +33,7 @@ function normalizeHost(hostname: string) {
 // This may be replaced later if we detect the DB listens on a different common port.
 export let pool = mysql.createPool({
   host: normalizeHost(url.hostname),
-  port: parseInt(url.port),
+  port: parseInt(url.port) || 3306,
   user: url.username,
   password: url.password,
   database: url.pathname.slice(1), // Remove leading slash
@@ -37,10 +41,8 @@ export let pool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   connectTimeout: 10000, // 10s connect timeout
-  // Keep existing SSL handling for environments with self-signed certs
-  ssl: {
-    rejectUnauthorized: false,
-  },
+  // Configure SSL only when required by the DATABASE_URL (Coolify often requires SSL)
+  ssl: useSsl ? { rejectUnauthorized: false } : undefined,
 });
 
 // Create the drizzle database instance (may be re-created if pool changes)

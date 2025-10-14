@@ -18,6 +18,10 @@ const MySQLStore = require('express-mysql-session')(session);
 // Parse DATABASE_URL for session store
 const dbUrl = new URL(process.env.DATABASE_URL || 'mysql://root:password@localhost:3306/default');
 
+// Detect SSL requirement from the URL
+const sessionSslMode = (dbUrl.searchParams.get('ssl-mode') || dbUrl.searchParams.get('sslmode') || '').toLowerCase();
+const sessionUseSsl = sessionSslMode === 'required' || sessionSslMode === 'verify_ca' || sessionSslMode === 'verify_identity';
+
 // Normalize host to prefer IPv4 localhost when appropriate (avoid ::1 when MySQL is IPv4-only)
 function normalizeHost(hostname: string) {
   // allow an explicit override via DB_HOST env var
@@ -49,7 +53,7 @@ const mysqlConfig = {
   user: dbUrl.username,
   password: dbUrl.password,
   database: dbUrl.pathname.slice(1),
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+  ssl: sessionUseSsl ? { rejectUnauthorized: false } : undefined,
 };
 
 console.log('Session store MySQL config:', {
