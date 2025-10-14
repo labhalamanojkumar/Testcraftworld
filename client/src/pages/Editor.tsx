@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import RichTextEditor from "@/components/RichTextEditor";
@@ -18,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Save, Eye, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
 
 interface Category {
   id: string;
@@ -28,6 +30,8 @@ interface Category {
 
 export default function Editor() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const { isAuthenticated, loading } = useAuth();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [tags, setTags] = useState("");
@@ -36,6 +40,12 @@ export default function Editor() {
   const [metaDescription, setMetaDescription] = useState("");
   const [slug, setSlug] = useState("");
   const [focusKeyword, setFocusKeyword] = useState("");
+
+  useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      setLocation("/login");
+    }
+  }, [isAuthenticated, loading, setLocation]);
 
   const { data: categories } = useQuery<Category[]>({
     queryKey: ["categories"],

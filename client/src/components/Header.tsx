@@ -83,12 +83,14 @@ export default function Header() {
               </div>
             </form>
 
-            <Button variant="default" size="sm" className="hidden sm:flex" asChild data-testid="button-write">
-              <Link href="/editor">
-                <PenSquare className="h-4 w-4 mr-2" />
-                Write
-              </Link>
-            </Button>
+            {isAuthenticated && (
+              <Button variant="default" size="sm" className="hidden sm:flex" asChild data-testid="button-write">
+                <Link href="/editor">
+                  <PenSquare className="h-4 w-4 mr-2" />
+                  Write
+                </Link>
+              </Button>
+            )}
 
             <Button variant="ghost" size="sm" className="hidden sm:flex" asChild data-testid="button-login">
               <Link href="/login">Login</Link>
@@ -161,12 +163,14 @@ export default function Header() {
               <Button variant="ghost" size="sm" className="justify-start" asChild data-testid="button-about-mobile">
                 <Link href="/about">About</Link>
               </Button>
-              <Button variant="default" size="sm" className="justify-start" asChild data-testid="button-write-mobile">
-                <Link href="/editor">
-                  <PenSquare className="h-4 w-4 mr-2" />
-                  Write Article
-                </Link>
-              </Button>
+              {isAuthenticated && (
+                <Button variant="default" size="sm" className="justify-start" asChild data-testid="button-write-mobile">
+                  <Link href="/editor">
+                    <PenSquare className="h-4 w-4 mr-2" />
+                    Write Article
+                  </Link>
+                </Button>
+              )}
               <Button variant="ghost" size="sm" className="justify-start" asChild data-testid="button-login-mobile">
                 <Link href="/login">Login</Link>
               </Button>
