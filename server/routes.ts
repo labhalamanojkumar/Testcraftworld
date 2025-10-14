@@ -292,6 +292,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Serve uploaded images
   app.use('/uploads', express.static('uploads'));
+
+  // Health check endpoint for deployment platforms
+  app.get('/health', (req, res) => {
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      service: 'BlogStreamPro',
+      version: '1.0.0'
+    });
+  });
+
+  // Contact form endpoint
   app.post("/api/contact", async (req, res) => {
     try {
       const { name, email, subject, category, message } = req.body;
