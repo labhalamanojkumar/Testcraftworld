@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import express from "express";
 import { createServer, type Server } from "http";
 import { createRequire } from "module";
 import { storage } from "./storage";
@@ -6,12 +7,36 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import session from "express-session";
 import { pool } from "./db";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 
 const require = createRequire(import.meta.url);
 const MySQLStore = require('connect-mysql-session')(session);
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
+
+  // Setup multer for file uploads
+  const upload = multer({
+    dest: 'uploads/',
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5MB limit
+    },
+    fileFilter: (req, file, cb) => {
+      // Allow only image files
+      if (file.mimetype.startsWith('image/')) {
+        cb(null, true);
+      } else {
+        cb(new Error('Only image files are allowed'));
+      }
+    },
+  });
+
+  // Create uploads directory if it doesn't exist
+  if (!fs.existsSync('uploads')) {
+    fs.mkdirSync('uploads');
+  }
 
   // Setup session
   app.use(session({
@@ -153,15 +178,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/articles", async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-    const article = await storage.createArticle({ ...req.body, authorId: (req.user as any).id });
-    res.json(article);
+    
+    try {
+      const { title, content, categoryId, authorId, tags, slug, metaTitle, metaDescription, focusKeyword, published = false } = req.body;
+
+      // Basic validation
+      if (!title?.trim() || !content?.trim()) {
+        return res.status(400).json({ error: "Title and content are required" });
+      }
+
+      // Generate slug if not provided
+      const finalSlug = slug?.trim() || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+      const articleData = {
+        title: title.trim(),
+        content: content.trim(),
+        categoryId: categoryId || null,
+        authorId: (req.user as any).id,
+        tags: tags ? JSON.stringify(tags) : null,
+        slug: finalSlug,
+        metaTitle: metaTitle?.trim() || null,
+        metaDescription: metaDescription?.trim() || null,
+        published: Boolean(published),
+      };
+
+      const article = await storage.createArticle(articleData);
+      res.json(article);
+    } catch (error) {
+      console.error("Create article error:", error);
+      res.status(500).json({ error: "Failed to create article" });
+    }
   });
 
   app.put("/api/articles/:id", async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-    const article = await storage.updateArticle(req.params.id, req.body);
-    if (!article) return res.status(404).json({ error: "Article not found" });
-    res.json(article);
+    
+    try {
+      const { title, content, categoryId, tags, slug, metaTitle, metaDescription, focusKeyword, published = false } = req.body;
+
+      // Check if article exists and user owns it
+      const existingArticle = await storage.getArticle(req.params.id);
+      if (!existingArticle) {
+        return res.status(404).json({ error: "Article not found" });
+      }
+
+      if (existingArticle.authorId !== (req.user as any).id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      // Generate slug if not provided
+      const finalSlug = slug?.trim() || (title ? title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : existingArticle.slug);
+
+      const updateData = {
+        title: title?.trim() || existingArticle.title,
+        content: content?.trim() || existingArticle.content,
+        categoryId: categoryId || existingArticle.categoryId,
+        tags: tags ? JSON.stringify(tags) : existingArticle.tags,
+        slug: finalSlug,
+        metaTitle: metaTitle?.trim() || existingArticle.metaTitle,
+        metaDescription: metaDescription?.trim() || existingArticle.metaDescription,
+        published: Boolean(published),
+      };
+
+      const article = await storage.updateArticle(req.params.id, updateData);
+      if (!article) return res.status(404).json({ error: "Article not found" });
+      res.json(article);
+    } catch (error) {
+      console.error("Update article error:", error);
+      res.status(500).json({ error: "Failed to update article" });
+    }
   });
 
   app.delete("/api/articles/:id", async (req, res) => {
@@ -170,7 +255,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: deleted });
   });
 
-  // Contact form endpoint
+  // Get user's drafts
+  app.get("/api/drafts", async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    const drafts = await storage.getArticlesByAuthor((req.user as any).id);
+    // Filter to only return unpublished articles (drafts)
+    const userDrafts = drafts.filter(article => !article.published);
+    res.json(userDrafts);
+  });
+
+  // Image upload endpoint
+  app.post("/api/upload", upload.single('image'), async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      // Generate unique filename
+      const ext = path.extname(req.file.originalname);
+      const filename = `${Date.now()}-${Math.random().toString(36).substring(2)}${ext}`;
+      const filepath = path.join('uploads', filename);
+
+      // Move file to final location
+      fs.renameSync(req.file.path, filepath);
+
+      // Return the URL for the uploaded image
+      const imageUrl = `/uploads/${filename}`;
+      res.json({ url: imageUrl });
+    } catch (error) {
+      console.error("Upload error:", error);
+      res.status(500).json({ error: "Failed to upload image" });
+    }
+  });
+
+  // Serve uploaded images
+  app.use('/uploads', express.static('uploads'));
   app.post("/api/contact", async (req, res) => {
     try {
       const { name, email, subject, category, message } = req.body;

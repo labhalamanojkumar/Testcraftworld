@@ -16,6 +16,12 @@ import {
 } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Save, Eye, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
@@ -31,7 +37,7 @@ interface Category {
 export default function Editor() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [tags, setTags] = useState("");
@@ -40,6 +46,7 @@ export default function Editor() {
   const [metaDescription, setMetaDescription] = useState("");
   const [slug, setSlug] = useState("");
   const [focusKeyword, setFocusKeyword] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -52,28 +59,140 @@ export default function Editor() {
     queryFn: () => fetch("/api/categories").then(r => r.json()),
   });
 
-  const handleSaveDraft = () => {
-    console.log("Saving draft...");
-    toast({
-      title: "Draft Saved",
-      description: "Your article has been saved as a draft.",
-    });
+  const handleSaveDraft = async () => {
+    if (!user) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to save drafts.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!title.trim() || !content.trim()) {
+      toast({
+        title: "Error",
+        description: "Title and content are required to save a draft.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const draftData = {
+        title: title.trim(),
+        content: content.trim(),
+        categoryId: category || undefined,
+        authorId: user.id,
+        tags: tags ? tags.split(',').map(t => t.trim()).filter(t => t) : [],
+        slug: slug.trim() || undefined,
+        metaTitle: metaTitle.trim() || undefined,
+        metaDescription: metaDescription.trim() || undefined,
+        focusKeyword: focusKeyword.trim() || undefined,
+        published: false, // This is a draft
+      };
+
+      const response = await fetch('/api/articles', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(draftData),
+      });
+
+      if (response.ok) {
+        const newDraft = await response.json();
+        toast({
+          title: "Draft Saved",
+          description: "Your article has been saved as a draft.",
+        });
+        // Optionally redirect to drafts page or stay here
+      } else {
+        const error = await response.json();
+        toast({
+          title: "Save Failed",
+          description: error.message || "Failed to save draft.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Save draft error:', error);
+      toast({
+        title: "Save Failed",
+        description: "An error occurred while saving the draft.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handlePreview = () => {
-    console.log("Opening preview...");
-    toast({
-      title: "Preview",
-      description: "Opening article preview...",
-    });
+    setPreviewOpen(true);
   };
 
-  const handlePublish = () => {
-    console.log("Publishing article...");
-    toast({
-      title: "Article Published",
-      description: "Your article is now live!",
-    });
+  const handlePublish = async () => {
+    if (!user) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to publish.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!title.trim() || !content.trim() || !category) {
+      toast({
+        title: "Error",
+        description: "Title, content, and category are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const articleData = {
+        title: title.trim(),
+        content: content.trim(),
+        categoryId: category,
+        authorId: user.id,
+        tags: tags ? tags.split(',').map(t => t.trim()).filter(t => t) : [],
+        slug: slug.trim() || undefined,
+        metaTitle: metaTitle.trim() || undefined,
+        metaDescription: metaDescription.trim() || undefined,
+        focusKeyword: focusKeyword.trim() || undefined,
+      };
+
+      const response = await fetch('/api/articles', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(articleData),
+      });
+
+      if (response.ok) {
+        const newArticle = await response.json();
+        toast({
+          title: "Article Published",
+          description: "Your article is now live!",
+        });
+        // Redirect to the article or home
+        setLocation(`/articles/${newArticle.id}`);
+      } else {
+        const error = await response.json();
+        toast({
+          title: "Publish Failed",
+          description: error.message || "Failed to publish article.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Publish error:', error);
+      toast({
+        title: "Publish Failed",
+        description: "An error occurred while publishing.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -210,6 +329,22 @@ export default function Editor() {
           </div>
         </div>
       </main>
+      
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{title || 'Article Preview'}</DialogTitle>
+          </DialogHeader>
+          <div className="prose max-w-none">
+            {title && <h1>{title}</h1>}
+            {content ? (
+              <div dangerouslySetInnerHTML={{ __html: content }} />
+            ) : (
+              <p className="text-muted-foreground">Start writing to see preview...</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       
       <Footer />
     </div>

@@ -9,7 +9,9 @@ import {
   Link as LinkIcon,
   Image as ImageIcon,
   Heading2,
+  Upload,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface RichTextEditorProps {
   value: string;
@@ -18,7 +20,91 @@ interface RichTextEditorProps {
 
 export default function RichTextEditor({ value, onChange }: RichTextEditorProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const handleImageUpload = async (file: File) => {
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Insert image markdown at cursor position
+        const textarea = textareaRef.current;
+        if (textarea) {
+          const start = textarea.selectionStart;
+          const imageMarkdown = `![${file.name}](${data.url})`;
+          const newValue = value.substring(0, start) + imageMarkdown + value.substring(start);
+          onChange(newValue);
+          
+          // Move cursor after the inserted image
+          setTimeout(() => {
+            textarea.focus();
+            textarea.setSelectionRange(start + imageMarkdown.length, start + imageMarkdown.length);
+          }, 0);
+        }
+
+        toast({
+          title: "Image Uploaded",
+          description: "Image has been uploaded and inserted into your content.",
+        });
+      } else {
+        const error = await response.json();
+        toast({
+          title: "Upload Failed",
+          description: error.error || "Failed to upload image.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast({
+        title: "Upload Failed",
+        description: "An error occurred while uploading the image.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: "Invalid File",
+          description: "Please select an image file.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Validate file size (5MB limit)
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "File Too Large",
+          description: "Please select an image smaller than 5MB.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      handleImageUpload(file);
+    }
+    // Reset input
+    event.target.value = '';
+  };
 
   const handleFormat = (format: string) => {
     const textarea = textareaRef.current;
@@ -51,10 +137,6 @@ export default function RichTextEditor({ value, onChange }: RichTextEditorProps)
       case "link":
         const url = prompt("Enter URL:");
         if (url) replacement = `[${selectedText}](${url})`;
-        break;
-      case "image":
-        const imageUrl = prompt("Enter image URL:");
-        if (imageUrl) replacement = `![${selectedText}](${imageUrl})`;
         break;
     }
 
@@ -132,11 +214,23 @@ export default function RichTextEditor({ value, onChange }: RichTextEditorProps)
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => handleFormat("image")}
-          data-testid="button-format-image"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading}
+          data-testid="button-upload-image"
         >
-          <ImageIcon className="h-4 w-4" />
+          {isUploading ? (
+            <Upload className="h-4 w-4 animate-spin" />
+          ) : (
+            <ImageIcon className="h-4 w-4" />
+          )}
         </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
       </div>
       <textarea
         ref={textareaRef}
