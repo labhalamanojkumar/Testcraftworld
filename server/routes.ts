@@ -52,6 +52,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       user: dbUrl.username,
       password: dbUrl.password,
       database: dbUrl.pathname.slice(1), // Remove leading slash
+      ssl: {
+        rejectUnauthorized: false, // Allow self-signed certificates
+      },
       clearExpired: true,
       checkExpirationInterval: 900000, // 15 minutes
       expiration: 86400000, // 1 day
