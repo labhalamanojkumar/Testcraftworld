@@ -5,10 +5,6 @@ import { storage } from "./storage";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import session from "express-session";
-import { pool } from "./db";
-
-const require = createRequire(import.meta.url);
-const MySQLStore = require('express-mysql-session')(session);
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -18,12 +14,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     secret: process.env.SESSION_SECRET || 'secret',
     resave: false,
     saveUninitialized: false,
-    store: new MySQLStore({
-      connection: pool,
-      clearExpired: true,
-      checkExpirationInterval: 900000, // 15 minutes
-      expiration: 86400000, // 1 day
-    }),
   }));
 
   // Setup passport
