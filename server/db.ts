@@ -1,5 +1,4 @@
-import { drizzle as drizzleMysql } from "drizzle-orm/mysql2";
-import { drizzle as drizzleSqlite } from "drizzle-orm/better-sqlite3";
+import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import * as schema from "../shared/schema";
 
@@ -10,39 +9,26 @@ if (!process.env.DATABASE_URL) {
 // Parse the DATABASE_URL to extract connection parameters
 const url = new URL(process.env.DATABASE_URL);
 
-// Declare db and pool
-export let db: any;
-export let pool: any;
+// Create an initial mysql2 pool with sensible timeouts and options.
+// This may be replaced later if we detect the DB listens on a different common port.
+export let pool = mysql.createPool({
+  host: url.hostname,
+  port: parseInt(url.port),
+  user: url.username,
+  password: url.password,
+  database: url.pathname.slice(1), // Remove leading slash
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  connectTimeout: 10000, // 10s connect timeout
+  // Keep existing SSL handling for environments with self-signed certs
+  ssl: {
+    rejectUnauthorized: false,
+  },
+});
 
-if (process.env.NODE_ENV === 'development') {
-  // Use SQLite for development
-  const Database = require('better-sqlite3');
-  const sqlite = new Database('dev.db');
-  db = drizzleSqlite(sqlite, { schema });
-  pool = null; // Not used in dev
-} else {
-  // Use MySQL for production
-  // Create an initial mysql2 pool with sensible timeouts and options.
-  // This may be replaced later if we detect the DB listens on a different common port.
-  pool = mysql.createPool({
-    host: url.hostname,
-    port: parseInt(url.port),
-    user: url.username,
-    password: url.password,
-    database: url.pathname.slice(1), // Remove leading slash
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    connectTimeout: 10000, // 10s connect timeout
-    // Keep existing SSL handling for environments with self-signed certs
-    ssl: {
-      rejectUnauthorized: false,
-    },
-  });
-
-  // Create the drizzle database instance (may be re-created if pool changes)
-  db = drizzleMysql(pool, { schema, mode: "default" });
-}
+// Create the drizzle database instance (may be re-created if pool changes)
+export let db = drizzle(pool, { schema, mode: "default" });
 
 import net from "net";
 
@@ -81,11 +67,6 @@ function errMsg(e: unknown): string {
 
 // Try to initialize DB connection with retries. Throws if unrecoverable.
 export async function initDB(options?: { retries?: number; delayMs?: number }) {
-  if (process.env.NODE_ENV === 'development') {
-    console.log("Using SQLite for development - no DB init needed");
-    return;
-  }
-
   const retries = options?.retries ?? 5;
   const delayMs = options?.delayMs ?? 2000;
 
@@ -118,7 +99,7 @@ export async function initDB(options?: { retries?: number; delayMs?: number }) {
             connectTimeout: 10000,
             ssl: { rejectUnauthorized: false },
           });
-          db = drizzleMysql(pool, { schema, mode: "default" });
+          db = drizzle(pool, { schema, mode: "default" });
         } catch (fallbackErr) {
           console.warn(`Fallback TCP to ${host}:3306 failed: ${errMsg(fallbackErr)}`);
           // if fallback also failed, continue to attempt using existing pool pings below
