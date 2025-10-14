@@ -6,23 +6,28 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=${PORT:-3000}
       - SESSION_SECRET=${SESSION_SECRET:-your-super-secret-session-key-change-this-in-production}
       - DATABASE_URL=${DATABASE_URL}
     env_file:
       - .env
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/me"]
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-3000}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    volumes:
+      - uploads:/app/uploads
     networks:
       - testcraft-network
+
+volumes:
+  uploads:
 
 networks:
   testcraft-network:

@@ -8,6 +8,7 @@ interface ArticleCardProps {
   title: string;
   excerpt: string;
   category: string;
+  categorySlug?: string;
   image: string;
   author: string;
   date: string;
@@ -20,15 +21,18 @@ export default function ArticleCard({
   title,
   excerpt,
   category,
+  categorySlug,
   image,
   author,
   date,
   readTime,
   variant = "vertical",
 }: ArticleCardProps) {
+  const articleUrl = categorySlug ? `/category/${categorySlug}/${slug}` : `/article/${slug}`;
+
   if (variant === "horizontal") {
     return (
-      <Link href={`/article/${slug}`} data-testid={`link-article-${slug}`}>
+      <Link href={articleUrl} data-testid={`link-article-${slug}`}>
         <Card className="overflow-hidden hover-elevate active-elevate-2 transition-all cursor-pointer">
           <div className="flex flex-col sm:flex-row gap-4 p-4">
             <div className="sm:w-64 h-48 sm:h-auto flex-shrink-0">
@@ -70,7 +74,7 @@ export default function ArticleCard({
   }
 
   return (
-    <Link href={`/article/${slug}`} data-testid={`link-article-${slug}`}>
+    <Link href={articleUrl} data-testid={`link-article-${slug}`}>
       <Card className="overflow-hidden hover-elevate active-elevate-2 transition-all cursor-pointer">
         <div className="aspect-video w-full overflow-hidden">
           <img

@@ -2,7 +2,7 @@ import { type User, type InsertUser, type Category, type InsertCategory, type Ar
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { users, categories, articles } from "../shared/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -23,6 +23,16 @@ export interface IStorage {
   createArticle(article: InsertArticle): Promise<Article>;
   updateArticle(id: string, article: Partial<InsertArticle>): Promise<Article | undefined>;
   deleteArticle(id: string): Promise<boolean>;
+  incrementArticleViews(id: string): Promise<boolean>;
+  incrementCategoryViews(id: string): Promise<boolean>;
+  getAnalytics(): Promise<{
+    totalArticles: number;
+    totalPublishedArticles: number;
+    totalCategories: number;
+    totalViews: number;
+    topArticles: Array<{ id: string; title: string; viewCount: number; slug: string }>;
+    topCategories: Array<{ id: string; name: string; viewCount: number; slug: string }>;
+  }>;
 }
 
 export class MemStorage implements IStorage {
@@ -69,7 +79,7 @@ export class MemStorage implements IStorage {
 
     categoriesData.forEach((cat) => {
       const id = randomUUID();
-      this.categories.set(id, { id, ...cat });
+      this.categories.set(id, { id, ...cat, viewCount: 0 });
     });
   }
 
@@ -109,7 +119,13 @@ export class MemStorage implements IStorage {
 
   async createCategory(insertCategory: InsertCategory): Promise<Category> {
     const id = randomUUID();
-    const category: Category = { id, name: insertCategory.name, slug: insertCategory.slug, description: insertCategory.description ?? null };
+    const category: Category = { 
+      id, 
+      name: insertCategory.name, 
+      slug: insertCategory.slug, 
+      description: insertCategory.description ?? null,
+      viewCount: insertCategory.viewCount ?? 0
+    };
     this.categories.set(id, category);
     return category;
   }
@@ -140,6 +156,7 @@ export class MemStorage implements IStorage {
       categoryId: insertArticle.categoryId ?? null,
       authorId: insertArticle.authorId ?? null,
       published: insertArticle.published ?? false,
+      viewCount: insertArticle.viewCount ?? 0,
     };
     this.articles.set(id, article);
     return article;
@@ -176,6 +193,57 @@ export class MemStorage implements IStorage {
 
   async deleteArticle(id: string): Promise<boolean> {
     return this.articles.delete(id);
+  }
+
+  async incrementArticleViews(id: string): Promise<boolean> {
+    const article = this.articles.get(id);
+    if (!article) return false;
+    article.viewCount = (article.viewCount || 0) + 1;
+    this.articles.set(id, article);
+    return true;
+  }
+
+  async incrementCategoryViews(id: string): Promise<boolean> {
+    const category = this.categories.get(id);
+    if (!category) return false;
+    category.viewCount = (category.viewCount || 0) + 1;
+    this.categories.set(id, category);
+    return true;
+  }
+
+  async getAnalytics(): Promise<{
+    totalArticles: number;
+    totalPublishedArticles: number;
+    totalCategories: number;
+    totalViews: number;
+    topArticles: Array<{ id: string; title: string; viewCount: number; slug: string }>;
+    topCategories: Array<{ id: string; name: string; viewCount: number; slug: string }>;
+  }> {
+    const allArticles = Array.from(this.articles.values());
+    const allCategories = Array.from(this.categories.values());
+
+    const publishedArticles = allArticles.filter(a => a.published);
+    const totalViews = allArticles.reduce((sum, a) => sum + (a.viewCount || 0), 0) +
+                      allCategories.reduce((sum, c) => sum + (c.viewCount || 0), 0);
+
+    const topArticles = publishedArticles
+      .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
+      .slice(0, 10)
+      .map(a => ({ id: a.id, title: a.title, viewCount: a.viewCount || 0, slug: a.slug }));
+
+    const topCategories = allCategories
+      .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
+      .slice(0, 10)
+      .map(c => ({ id: c.id, name: c.name, viewCount: c.viewCount || 0, slug: c.slug }));
+
+    return {
+      totalArticles: allArticles.length,
+      totalPublishedArticles: publishedArticles.length,
+      totalCategories: allCategories.length,
+      totalViews,
+      topArticles,
+      topCategories,
+    };
   }
 }
 
@@ -237,6 +305,7 @@ export class DbStorage implements IStorage {
       name: insertCategory.name,
       slug: insertCategory.slug,
       description: insertCategory.description ?? null,
+      viewCount: insertCategory.viewCount ?? 0,
     };
 
     await db.insert(categories).values(category);
@@ -277,6 +346,7 @@ export class DbStorage implements IStorage {
       categoryId: insertArticle.categoryId ?? null,
       authorId: insertArticle.authorId ?? null,
       published: insertArticle.published ?? false,
+      viewCount: insertArticle.viewCount ?? 0,
     };
 
     await db.insert(articles).values(article);
@@ -299,6 +369,99 @@ export class DbStorage implements IStorage {
     } catch (error) {
       return false;
     }
+  }
+
+  async incrementArticleViews(id: string): Promise<boolean> {
+    try {
+      await db
+        .update(articles)
+        .set({ viewCount: sql`${articles.viewCount} + 1` })
+        .where(eq(articles.id, id));
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async incrementCategoryViews(id: string): Promise<boolean> {
+    try {
+      await db
+        .update(categories)
+        .set({ viewCount: sql`${categories.viewCount} + 1` })
+        .where(eq(categories.id, id));
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async getAnalytics(): Promise<{
+    totalArticles: number;
+    totalPublishedArticles: number;
+    totalCategories: number;
+    totalViews: number;
+    topArticles: Array<{ id: string; title: string; viewCount: number; slug: string }>;
+    topCategories: Array<{ id: string; name: string; viewCount: number; slug: string }>;
+  }> {
+    // Get total counts
+    const [articleCounts] = await db
+      .select({
+        total: sql<number>`count(*)`,
+        published: sql<number>`sum(case when ${articles.published} = 1 then 1 else 0 end)`,
+        totalViews: sql<number>`coalesce(sum(${articles.viewCount}), 0)`,
+      })
+      .from(articles);
+
+    const [categoryCounts] = await db
+      .select({
+        total: sql<number>`count(*)`,
+        totalViews: sql<number>`coalesce(sum(${categories.viewCount}), 0)`,
+      })
+      .from(categories);
+
+    // Get top articles
+    const topArticlesResult = await db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        viewCount: articles.viewCount,
+        slug: articles.slug,
+      })
+      .from(articles)
+      .where(eq(articles.published, true))
+      .orderBy(sql`${articles.viewCount} desc`)
+      .limit(10);
+
+    // Get top categories
+    const topCategoriesResult = await db
+      .select({
+        id: categories.id,
+        name: categories.name,
+        viewCount: categories.viewCount,
+        slug: categories.slug,
+      })
+      .from(categories)
+      .orderBy(sql`${categories.viewCount} desc`)
+      .limit(10);
+
+    return {
+      totalArticles: articleCounts?.total || 0,
+      totalPublishedArticles: articleCounts?.published || 0,
+      totalCategories: categoryCounts?.total || 0,
+      totalViews: (articleCounts?.totalViews || 0) + (categoryCounts?.totalViews || 0),
+      topArticles: topArticlesResult.map(a => ({
+        id: a.id,
+        title: a.title,
+        viewCount: a.viewCount || 0,
+        slug: a.slug,
+      })),
+      topCategories: topCategoriesResult.map(c => ({
+        id: c.id,
+        name: c.name,
+        viewCount: c.viewCount || 0,
+        slug: c.slug,
+      })),
+    };
   }
 }
 

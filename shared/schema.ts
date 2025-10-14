@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { mysqlTable, text, varchar, boolean, timestamp, datetime } from "drizzle-orm/mysql-core";
+import { mysqlTable, text, varchar, boolean, timestamp, datetime, int } from "drizzle-orm/mysql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -22,6 +22,7 @@ export const categories = mysqlTable("categories", {
   name: varchar("name", { length: 255 }).notNull().unique(),
   slug: varchar("slug", { length: 255 }).notNull().unique(),
   description: text("description"),
+  viewCount: int("view_count").default(0), // Number of times category page was viewed
 });
 
 export const articles = mysqlTable("articles", {
@@ -36,6 +37,7 @@ export const articles = mysqlTable("articles", {
   metaDescription: text("meta_description"),
   tags: text("tags"),
   published: boolean("published").default(false),
+  viewCount: int("view_count").default(0), // Number of times article was viewed
   createdAt: datetime("created_at").default(sql`NOW()`),
   updatedAt: datetime("updated_at").default(sql`NOW()`),
 });
@@ -54,6 +56,7 @@ export const insertCategorySchema = createInsertSchema(categories).pick({
   name: true,
   slug: true,
   description: true,
+  viewCount: true,
 });
 
 export const insertArticleSchema = createInsertSchema(articles).pick({
@@ -67,6 +70,7 @@ export const insertArticleSchema = createInsertSchema(articles).pick({
   metaDescription: true,
   tags: true,
   published: true,
+  viewCount: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;

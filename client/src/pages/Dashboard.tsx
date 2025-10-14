@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Plus, Edit, Settings, LogOut, FileText, Eye, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import Header from "@/components/Header";
 
 interface User {
   id: string;
@@ -47,25 +48,41 @@ export default function Dashboard() {
 
   const fetchUserData = async () => {
     try {
-      const [userResponse, articlesResponse] = await Promise.all([
-        fetch("/api/me"),
-        fetch("/api/articles")
-      ]);
-
+      // First check if user is authenticated
+      const userResponse = await fetch("/api/me");
       if (userResponse.ok) {
         const userData = await userResponse.json();
-        setUser(userData.user);
+        const currentUser = userData.user;
+        if (!currentUser) {
+          // User not authenticated, redirect to login
+          setLocation("/login");
+          return;
+        }
+        setUser(currentUser);
+
+        // Now fetch user's articles since we know they're authenticated
+        const [publishedResponse, draftsResponse] = await Promise.all([
+          fetch("/api/my-published-articles"),
+          fetch("/api/drafts")
+        ]);
+
+        let allArticles: Article[] = [];
+
+        if (publishedResponse.ok) {
+          const publishedData = await publishedResponse.json();
+          allArticles = [...allArticles, ...publishedData];
+        }
+
+        if (draftsResponse.ok) {
+          const draftsData = await draftsResponse.json();
+          allArticles = [...allArticles, ...draftsData];
+        }
+
+        setArticles(allArticles);
       } else {
         // User not authenticated, redirect to login
         setLocation("/login");
         return;
-      }
-
-      if (articlesResponse.ok) {
-        const articlesData = await articlesResponse.json();
-        // Filter articles by current user
-        const userArticles = articlesData.filter((article: Article) => article.authorId === user?.id);
-        setArticles(userArticles);
       }
     } catch (error) {
       console.error("Error fetching user data:", error);
@@ -120,6 +137,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+      <Header />
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">

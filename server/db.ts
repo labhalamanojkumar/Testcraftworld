@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/mysql2";
-import mysql from "mysql2/promise";
+import * as mysql from "mysql2/promise";
 import * as schema from "../shared/schema";
+import * as net from "net";
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL environment variable is required");
@@ -48,7 +49,51 @@ export let pool = mysql.createPool({
 // Create the drizzle database instance (may be re-created if pool changes)
 export let db = drizzle(pool, { schema, mode: "default" });
 
-import net from "net";
+// Enhanced database connection utilities to prevent SSL and connection issues
+
+export async function validateDatabaseConnection() {
+  try {
+    const conn = await pool.getConnection();
+    await conn.ping();
+    conn.release();
+    return { success: true, message: "Database connection validated" };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: `Database connection failed: ${error.message}`,
+      error: error.code || 'UNKNOWN_ERROR'
+    };
+  }
+}
+
+export async function ensureDatabaseTables() {
+  const conn = await pool.getConnection();
+  try {
+    // Check if tables exist and create them if needed
+    const tables = ['articles', 'categories', 'users'];
+    for (const table of tables) {
+      const [rows] = await conn.execute(
+        `SHOW TABLES LIKE '${table}'`
+      );
+      if ((rows as any[]).length === 0) {
+        console.warn(`Table '${table}' does not exist. Please run database migrations.`);
+      }
+    }
+  } finally {
+    conn.release();
+  }
+}
+
+// Connection health monitoring
+export function startConnectionMonitoring(intervalMs = 30000) {
+  setInterval(async () => {
+    const health = await validateDatabaseConnection();
+    if (!health.success) {
+      console.error('Database connection health check failed:', health.message);
+      // In production, you might want to send alerts or attempt reconnection
+    }
+  }, intervalMs);
+}
 
 function tcpCheck(host: string, port: number, timeoutMs = 5000): Promise<void> {
   return new Promise((resolve, reject) => {

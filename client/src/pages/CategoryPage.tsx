@@ -1,5 +1,6 @@
 import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ArticleCard from "@/components/ArticleCard";
@@ -37,6 +38,13 @@ export default function CategoryPage() {
     enabled: !!slug,
   });
 
+  // Increment category view count when category page loads
+  useEffect(() => {
+    if (category?.id) {
+      fetch(`/api/categories/${category.id}/view`, { method: "POST" }).catch(console.error);
+    }
+  }, [category?.id]);
+
   const { data: articles } = useQuery<Article[]>({
     queryKey: ["articles", category?.id],
     queryFn: () => fetch(`/api/categories/${category?.id}/articles`).then(r => r.json()),
@@ -73,6 +81,7 @@ export default function CategoryPage() {
                 title={article.title}
                 excerpt={article.excerpt || ""}
                 category={category.name}
+                categorySlug={category.slug}
                 image="" // Placeholder
                 author="Author"
                 date={new Date(article.createdAt).toLocaleDateString()}

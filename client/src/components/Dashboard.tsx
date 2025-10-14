@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
-import { Eye, FileText, Users, TrendingUp, Calendar, Clock } from "lucide-react";
+import { Eye, FileText, Users, TrendingUp, Calendar, Clock, BarChart3 } from "lucide-react";
 
 interface Category {
   id: string;
@@ -25,6 +25,15 @@ interface Article {
   updatedAt: string;
 }
 
+interface AnalyticsData {
+  totalArticles: number;
+  totalPublishedArticles: number;
+  totalCategories: number;
+  totalViews: number;
+  topArticles: Array<{ id: string; title: string; viewCount: number; slug: string }>;
+  topCategories: Array<{ id: string; name: string; viewCount: number; slug: string }>;
+}
+
 export default function Dashboard() {
   const { data: categories } = useQuery<Category[]>({
     queryKey: ["categories"],
@@ -36,16 +45,21 @@ export default function Dashboard() {
     queryFn: () => fetch("/api/articles").then(r => r.json()),
   });
 
+  const { data: analytics } = useQuery<AnalyticsData>({
+    queryKey: ["analytics"],
+    queryFn: () => fetch("/api/analytics").then(r => r.json()),
+  });
+
   // Calculate statistics
   const totalArticles = articles?.length || 0;
   const publishedArticles = articles?.filter(a => a.published).length || 0;
   const draftArticles = totalArticles - publishedArticles;
   const totalCategories = categories?.length || 0;
 
-  // Mock real-time views (in a real app, this would come from analytics)
-  const totalViews = Math.floor(Math.random() * 10000) + 5000;
-  const todayViews = Math.floor(Math.random() * 500) + 100;
-  const weeklyViews = Math.floor(Math.random() * 3000) + 1000;
+  // Use real analytics data if available, otherwise fallback to basic counts
+  const totalViews = analytics?.totalViews || 0;
+  const topArticles = analytics?.topArticles || [];
+  const topCategories = analytics?.topCategories || [];
 
   // Recent articles (last 5)
   const recentArticles = articles
@@ -87,24 +101,24 @@ export default function Dashboard() {
     {
       title: "Total Views",
       value: totalViews.toLocaleString(),
-      change: "+12.5%",
+      change: analytics ? "Real-time data" : "Analytics not available",
       icon: Eye,
       color: "text-indigo-600",
       bgColor: "bg-indigo-100",
     },
     {
-      title: "Today",
-      value: todayViews.toLocaleString(),
-      change: "+8.2%",
-      icon: Calendar,
+      title: "Article Views",
+      value: topArticles.reduce((sum, article) => sum + article.viewCount, 0).toLocaleString(),
+      change: `${analytics?.totalPublishedArticles || 0} published articles`,
+      icon: FileText,
       color: "text-cyan-600",
       bgColor: "bg-cyan-100",
     },
     {
-      title: "This Week",
-      value: weeklyViews.toLocaleString(),
-      change: "+15.3%",
-      icon: TrendingUp,
+      title: "Category Views",
+      value: topCategories.reduce((sum, category) => sum + category.viewCount, 0).toLocaleString(),
+      change: `${analytics?.totalCategories || 0} categories`,
+      icon: BarChart3,
       color: "text-emerald-600",
       bgColor: "bg-emerald-100",
     },
@@ -182,6 +196,73 @@ export default function Dashboard() {
           )}
         </div>
       </Card>
+
+      {/* Top Performing Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top Articles */}
+        <Card className="p-6">
+          <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-green-600" />
+            Top Articles by Views
+          </h3>
+          <div className="space-y-3">
+            {topArticles.length > 0 ? (
+              topArticles.slice(0, 5).map((article, index) => (
+                <div key={article.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold text-muted-foreground w-6">
+                      #{index + 1}
+                    </span>
+                    <div className="flex-1">
+                      <h4 className="font-medium truncate text-sm">{article.title}</h4>
+                      <p className="text-xs text-muted-foreground">
+                        {article.viewCount} views
+                      </p>
+                    </div>
+                  </div>
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                </div>
+              ))
+            ) : (
+              <p className="text-muted-foreground text-center py-8 text-sm">
+                No view data available yet. Views will appear here once articles are accessed.
+              </p>
+            )}
+          </div>
+        </Card>
+
+        {/* Top Categories */}
+        <Card className="p-6">
+          <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-blue-600" />
+            Top Categories by Views
+          </h3>
+          <div className="space-y-3">
+            {topCategories.length > 0 ? (
+              topCategories.slice(0, 5).map((category, index) => (
+                <div key={category.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold text-muted-foreground w-6">
+                      #{index + 1}
+                    </span>
+                    <div className="flex-1">
+                      <h4 className="font-medium truncate text-sm">{category.name}</h4>
+                      <p className="text-xs text-muted-foreground">
+                        {category.viewCount} views
+                      </p>
+                    </div>
+                  </div>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </div>
+              ))
+            ) : (
+              <p className="text-muted-foreground text-center py-8 text-sm">
+                No view data available yet. Views will appear here once categories are accessed.
+              </p>
+            )}
+          </div>
+        </Card>
+      </div>
 
       {/* Quick Actions */}
       <Card className="p-6">

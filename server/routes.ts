@@ -8,21 +8,25 @@ import { Strategy as LocalStrategy } from "passport-local";
 import session from "express-session";
 import { pool } from "./db";
 import mysql from "mysql2/promise";
+import { drizzle } from "drizzle-orm/mysql2";
+import * as schema from "../shared/schema";
+
+const require = createRequire(import.meta.url);
+const MySQLStore = require('express-mysql-session')(session);
+const MemoryStore = require('memorystore')(session);
+
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 
-const require = createRequire(import.meta.url);
-const MySQLStore = require('express-mysql-session')(session);
-
-// Parse DATABASE_URL for session store
+// Parse DATABASE_URL for session store (keeping for compatibility but not used)
 const dbUrl = new URL(process.env.DATABASE_URL || 'mysql://root:password@localhost:3306/default');
 
-// Detect SSL requirement from the URL
+// Detect SSL requirement from the URL (keeping for compatibility but not used)
 const sessionSslMode = (dbUrl.searchParams.get('ssl-mode') || dbUrl.searchParams.get('sslmode') || '').toLowerCase();
 const sessionUseSsl = sessionSslMode === 'required' || sessionSslMode === 'verify_ca' || sessionSslMode === 'verify_identity';
 
-// Normalize host to prefer IPv4 localhost when appropriate (avoid ::1 when MySQL is IPv4-only)
+// Normalize host to prefer IPv4 localhost when appropriate (keeping for compatibility but not used)
 function normalizeHost(hostname: string) {
   // allow an explicit override via DB_HOST env var
   const envHost = process.env.DB_HOST;
@@ -46,7 +50,7 @@ function normalizeHost(hostname: string) {
   return hostname;
 }
 
-// Create MySQL connection config for session store
+// Keeping mysqlConfig for compatibility but using main pool instead
 const mysqlConfig = {
   host: normalizeHost(dbUrl.hostname),
   port: parseInt(dbUrl.port) || 3306,
@@ -63,72 +67,8 @@ console.log('Session store MySQL config:', {
   ssl: mysqlConfig.ssl ? 'enabled' : 'disabled'
 });
 
-// Helper to create a session pool with the current config
-function createSessionPool(cfg: any) {
-  return mysql.createPool({
-    ...cfg,
-    waitForConnections: true,
-    connectionLimit: 5,
-    queueLimit: 0,
-  });
-}
-
-let sessionPool = createSessionPool(mysqlConfig);
-
-// Try pinging sessionPool; if it fails with ECONNREFUSED and host is 127.0.0.1, attempt an alternate
-async function ensureSessionPool() {
-  console.log('Attempting to establish session DB pool...');
-  try {
-    const conn = await sessionPool.getConnection();
-    try {
-      await conn.ping();
-    } finally {
-      conn.release();
-    }
-    console.log('Session DB pool connected successfully');
-    return;
-  } catch (err: any) {
-    console.warn('Session pool ping failed:', err && err.code ? `${err.code} - ${err.message}` : err);
-
-    // If we attempted to connect to IPv6 loopback or an address that refused and hostname wasn't explicit, try 127.0.0.1
-    if (mysqlConfig.host === '::1' || mysqlConfig.host === '[::1]' || mysqlConfig.host === 'localhost') {
-      console.log('Retrying session DB pool with 127.0.0.1');
-      mysqlConfig.host = '127.0.0.1';
-      sessionPool = createSessionPool(mysqlConfig);
-      try {
-        const conn = await sessionPool.getConnection();
-        try { await conn.ping(); } finally { conn.release(); }
-        console.log('Session DB pool connected via 127.0.0.1');
-        return;
-      } catch (err2: any) {
-        console.error('Retry to 127.0.0.1 failed:', err2 && err2.code ? `${err2.code} - ${err2.message}` : err2);
-      }
-    }
-
-    // As a last resort, if DB_URL contains an explicit host param or a fallback port, try port 3306
-    if (mysqlConfig.port !== 3306) {
-      console.log('Retrying session DB pool with port 3306');
-      mysqlConfig.port = 3306;
-      sessionPool = createSessionPool(mysqlConfig);
-      try {
-        const conn = await sessionPool.getConnection();
-        try { await conn.ping(); } finally { conn.release(); }
-        console.log('Session DB pool connected via port 3306');
-        return;
-      } catch (err3: any) {
-        console.error('Retry to port 3306 failed:', err3 && err3.code ? `${err3.code} - ${err3.message}` : err3);
-      }
-    }
-
-    // If we reach here, session pool could not be established; rethrow to allow higher-level handling
-    throw err;
-  }
-}
-
-// Ensure pool immediately (but do not block module load; handled in registerRoutes now)
-// ensureSessionPool().catch((e) => {
-//   console.error('Failed to establish session DB pool on startup:', e && e.code ? `${e.code} - ${e.message}` : e);
-// });
+// Using main pool for sessions instead of separate session pool
+// ensureSessionPool function removed - using main pool
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -154,24 +94,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     fs.mkdirSync('uploads');
   }
 
-  // Ensure session pool is ready before setting up session store
-  try {
-    await ensureSessionPool();
-  } catch (err) {
-    console.error('Failed to establish session pool, continuing with potentially broken session store:', err);
-  }
-
-  // Setup session
+  // Setup session using memory store (temporary fix for SSL issues)
+  // TODO: Implement proper MySQL session store with SSL
   app.use(session({
     secret: process.env.SESSION_SECRET || 'secret',
     resave: false,
     saveUninitialized: false,
-    store: new MySQLStore({
-      connection: sessionPool,
-      clearExpired: true,
-      checkExpirationInterval: 900000, // 15 minutes
-      expiration: 86400000, // 1 day
+    store: new MemoryStore({
+      checkPeriod: 86400000, // prune expired entries every 24h
     }),
+    cookie: {
+      secure: false, // Set to true in production with HTTPS
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
   }));
 
   // Setup passport
@@ -276,6 +211,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(article);
   });
 
+  app.get("/api/categories/:categorySlug/articles/:articleSlug", async (req, res) => {
+    try {
+      const { categorySlug, articleSlug } = req.params;
+      
+      // First get the category by slug
+      const categories = await storage.getCategories();
+      const category = categories.find(c => c.slug === categorySlug);
+      if (!category) return res.status(404).json({ error: "Category not found" });
+      
+      // Then get articles in that category
+      const articles = await storage.getArticlesByCategory(category.id);
+      const article = articles.find(a => a.slug === articleSlug);
+      if (!article) return res.status(404).json({ error: "Article not found in this category" });
+      
+      res.json(article);
+    } catch (error) {
+      console.error("Error fetching article by category and slug:", error);
+      res.status(500).json({ error: "Failed to fetch article" });
+    }
+  });
+
   app.post("/api/categories", async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const category = await storage.createCategory(req.body);
@@ -311,7 +267,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Generate slug if not provided
-      const finalSlug = slug?.trim() || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      let finalSlug = slug?.trim() || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+      // Ensure slug uniqueness
+      let counter = 1;
+      let uniqueSlug = finalSlug;
+      const existingArticles = await storage.getArticles();
+      const allArticles = await storage.getArticlesByAuthor((req.user as any).id); // Get all articles by this author
+      const allSlugs = [...existingArticles, ...allArticles].map(a => a.slug);
+
+      while (allSlugs.includes(uniqueSlug)) {
+        uniqueSlug = `${finalSlug}-${counter}`;
+        counter++;
+      }
 
       const articleData = {
         title: title.trim(),
@@ -319,7 +287,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         categoryId: categoryId || null,
         authorId: (req.user as any).id,
         tags: tags ? JSON.stringify(tags) : null,
-        slug: finalSlug,
+        slug: uniqueSlug,
         metaTitle: metaTitle?.trim() || null,
         metaDescription: metaDescription?.trim() || null,
         published: Boolean(published),
@@ -350,7 +318,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Generate slug if not provided
-      const finalSlug = slug?.trim() || (title ? title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : existingArticle.slug);
+      let finalSlug = slug?.trim() || (title ? title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : existingArticle.slug);
+
+      // Ensure slug uniqueness (exclude current article)
+      if (finalSlug !== existingArticle.slug) {
+        let counter = 1;
+        let uniqueSlug = finalSlug;
+        const existingArticles = await storage.getArticles();
+        const allArticles = await storage.getArticlesByAuthor((req.user as any).id);
+        const allSlugs = [...existingArticles, ...allArticles]
+          .filter(a => a.id !== req.params.id) // Exclude current article
+          .map(a => a.slug);
+
+        while (allSlugs.includes(uniqueSlug)) {
+          uniqueSlug = `${finalSlug}-${counter}`;
+          counter++;
+        }
+        finalSlug = uniqueSlug;
+      }
 
       const updateData = {
         title: title?.trim() || existingArticle.title,
@@ -378,6 +363,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: deleted });
   });
 
+  // Get user's published articles
+  app.get("/api/my-published-articles", async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    const articles = await storage.getArticlesByAuthor((req.user as any).id);
+    // Filter to only return published articles
+    const userPublished = articles.filter(article => article.published);
+    res.json(userPublished);
+  });
+
   // Get user's drafts
   app.get("/api/drafts", async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
@@ -385,6 +379,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Filter to only return unpublished articles (drafts)
     const userDrafts = drafts.filter(article => !article.published);
     res.json(userDrafts);
+  });
+
+  // Analytics routes (superadmin only)
+  app.get("/api/analytics", async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    
+    // Check if user is superadmin
+    const user = req.user as any;
+    if (user.role !== 'superadmin') {
+      return res.status(403).json({ error: "Forbidden: Superadmin access required" });
+    }
+
+    try {
+      const analytics = await storage.getAnalytics();
+      res.json(analytics);
+    } catch (error) {
+      console.error("Analytics error:", error);
+      res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
+  // Increment article view count (public endpoint)
+  app.post("/api/articles/:id/view", async (req, res) => {
+    try {
+      const success = await storage.incrementArticleViews(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Article not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Increment article view error:", error);
+      res.status(500).json({ error: "Failed to increment view count" });
+    }
+  });
+
+  // Increment category view count (public endpoint)
+  app.post("/api/categories/:id/view", async (req, res) => {
+    try {
+      const success = await storage.incrementCategoryViews(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Category not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Increment category view error:", error);
+      res.status(500).json({ error: "Failed to increment view count" });
+    }
   });
 
   // Image upload endpoint

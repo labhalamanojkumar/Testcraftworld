@@ -13,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import Dashboard from "@/components/Dashboard";
 import RichTextEditor from "@/components/RichTextEditor";
 import SEOFields from "@/components/SEOFields";
+import Header from "@/components/Header";
 import { Save, Eye, Send, Plus, LayoutDashboard, FileText, Users } from "lucide-react";
 
 interface User {
@@ -143,34 +144,7 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <h1 className="text-2xl font-bold relative group cursor-pointer transition-transform duration-300 hover:scale-105">
-                <span className="bg-gradient-to-r from-blue-600 to-blue-600 bg-clip-text text-transparent group-hover:from-blue-500 group-hover:to-blue-700 transition-all duration-300">Testcraft</span>
-                <span className="bg-gradient-to-r from-orange-500 to-orange-500 bg-clip-text text-transparent group-hover:from-orange-400 group-hover:to-orange-600 transition-all duration-300"> World</span>
-                <span className="bg-gradient-to-r from-blue-600 to-blue-600 bg-clip-text text-transparent group-hover:from-blue-500 group-hover:to-blue-700 transition-all duration-300"> Admin</span>
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/30 via-orange-500/30 to-blue-500/30 opacity-0 group-hover:opacity-100 transition-all duration-500 rounded-lg blur-2xl scale-150 -z-10 animate-pulse group-hover:animate-none"></div>
-              </h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">Welcome, {user?.username}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setUser(null);
-                  toast({ title: "Logged out successfully" });
-                }}
-              >
-                Logout
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
+      <Header />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">

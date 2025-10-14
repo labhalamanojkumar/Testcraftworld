@@ -41,10 +41,35 @@ app.use((req, res, next) => {
   console.log("Starting server initialization...");
   // Ensure DB is available before registering routes
   try {
-    const { initDB } = await import("./db");
+    const { initDB, validateDatabaseConnection, ensureDatabaseTables } = await import("./db");
+
+    console.log("🔌 Initializing database connection...");
     await initDB({ retries: 6, delayMs: 2000 });
-  } catch (err) {
-    console.error("Failed to initialize DB, exiting:", err);
+
+    // Validate connection
+    const healthCheck = await validateDatabaseConnection();
+    if (!healthCheck.success) {
+      console.error("❌ Database health check failed:", healthCheck.message);
+      console.error("💡 Common fixes:");
+      console.error("   - Check DATABASE_URL format and credentials");
+      console.error("   - Ensure SSL mode is correctly set for remote databases");
+      console.error("   - Verify database server is accessible");
+      console.error("   - Check firewall and network connectivity");
+      process.exit(1);
+    }
+    console.log("✅ Database connection established");
+
+    // Ensure tables exist
+    await ensureDatabaseTables();
+
+  } catch (err: any) {
+    console.error("❌ Database initialization failed:", err.message);
+    console.error("🔧 Troubleshooting steps:");
+    console.error("1. Verify DATABASE_URL format:");
+    console.error("   mysql://user:password@host:port/database?ssl-mode=REQUIRED");
+    console.error("2. For Coolify/remote databases, ensure SSL is enabled");
+    console.error("3. Check network connectivity to database host");
+    console.error("4. Verify database credentials and permissions");
     process.exit(1);
   }
 
@@ -78,10 +103,50 @@ app.use((req, res, next) => {
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
   console.log(`Attempting to start server on port ${port}...`);
+
+  // Add error handling for server startup
   server.listen({
     port,
     host: "0.0.0.0",
   }, () => {
     log(`serving on port ${port}`);
+  }).on('error', (err: any) => {
+    console.error(`❌ Failed to start server on port ${port}:`, err.message);
+    if (err.code === 'EADDRINUSE') {
+      console.error(`💡 Port ${port} is already in use. Try a different port or kill the process using it.`);
+    }
+    process.exit(1);
+  });
+
+  // Handle process termination gracefully
+  process.on('SIGINT', () => {
+    console.log('\n🛑 Received SIGINT, shutting down gracefully...');
+    server.close(() => {
+      console.log('✅ Server closed successfully');
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGTERM', () => {
+    console.log('\n🛑 Received SIGTERM, shutting down gracefully...');
+    server.close(() => {
+      console.log('✅ Server closed successfully');
+      process.exit(0);
+    });
+  });
+
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (err) => {
+    console.error('❌ Uncaught Exception:', err);
+    server.close(() => {
+      process.exit(1);
+    });
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+    server.close(() => {
+      process.exit(1);
+    });
   });
 })();

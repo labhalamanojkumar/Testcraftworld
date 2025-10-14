@@ -32,6 +32,7 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/profile" component={Profile} />
       <Route path="/category/:slug" component={CategoryPage} />
+      <Route path="/category/:categorySlug/:articleSlug" component={ArticlePage} />
       <Route path="/article/:slug" component={ArticlePage} />
       <Route path="/editor" component={Editor} />
       <Route path="/admin" component={Admin} />

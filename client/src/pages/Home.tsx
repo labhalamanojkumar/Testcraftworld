@@ -16,22 +16,38 @@ interface Article {
   createdAt: string;
 }
 
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+}
+
 export default function Home() {
   const { data: articles } = useQuery<Article[]>({
     queryKey: ["articles"],
     queryFn: () => fetch("/api/articles").then(r => r.json()),
   });
 
-  const recentArticles = articles?.slice(0, 3).map((art) => ({
-    slug: art.slug,
-    title: art.title,
-    excerpt: art.excerpt || "",
-    category: "Article", // Could fetch category name
-    image: "", // Placeholder
-    author: "Author",
-    date: new Date(art.createdAt).toLocaleDateString(),
-    readTime: "5 min read",
-  })) || [];
+  const { data: categories } = useQuery<Category[]>({
+    queryKey: ["categories"],
+    queryFn: () => fetch("/api/categories").then(r => r.json()),
+  });
+
+  const recentArticles = articles?.slice(0, 3).map((art) => {
+    const category = categories?.find(c => c.id === art.categoryId);
+    return {
+      slug: art.slug,
+      title: art.title,
+      excerpt: art.excerpt || "",
+      category: category?.name || "Uncategorized",
+      categorySlug: category?.slug,
+      image: "", // Placeholder
+      author: "Author",
+      date: new Date(art.createdAt).toLocaleDateString(),
+      readTime: "5 min read",
+    };
+  }) || [];
 
   return (
     <div className="min-h-screen flex flex-col">

@@ -10,23 +10,24 @@
         "auto_deploy": true
       },
       "build": {
-        "type": "nixpacks"
+        "type": "docker",
+        "dockerfile": "Dockerfile"
       },
       "ports": [
         {
-          "target": 3000,
-          "published": 3000,
+          "target": "${{PORT}}",
+          "published": "${{PORT}}",
           "protocol": "tcp"
         }
       ],
       "environment": {
         "NODE_ENV": "production",
-        "PORT": "3000"
+        "PORT": "${{PORT}}"
       },
       "healthcheck": {
         "type": "http",
-        "path": "/api/me",
-        "port": 3000,
+        "path": "/health",
+        "port": "${{PORT}}",
         "interval": 30,
         "timeout": 10,
         "retries": 3

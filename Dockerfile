@@ -1,6 +1,9 @@
 # Use Node.js 18 Alpine for smaller image size
 FROM node:18-alpine
 
+# Install curl for health checks
+RUN apk add --no-cache curl
+
 # Set working directory
 WORKDIR /app
 
@@ -21,16 +24,19 @@ RUN npm prune --production
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nextjs -u 1001
 
+# Create uploads directory and set permissions
+RUN mkdir -p /app/uploads && chown -R nextjs:nodejs /app/uploads
+
 # Change ownership of the app directory
 RUN chown -R nextjs:nodejs /app
 USER nextjs
 
-# Expose the port the app runs on
+# Expose the port the app runs on (Coolify will override this)
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3000/api/me || exit 1
+# Health check using the /health endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:${PORT:-3000}/health || exit 1
 
 # Start the application
 CMD ["npm", "start"]

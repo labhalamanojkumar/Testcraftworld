@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import RichTextEditor from "@/components/RichTextEditor";
@@ -37,6 +37,7 @@ interface Category {
 export default function Editor() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const search = useSearch();
   const { isAuthenticated, loading, user } = useAuth();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
@@ -47,12 +48,69 @@ export default function Editor() {
   const [slug, setSlug] = useState("");
   const [focusKeyword, setFocusKeyword] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
       setLocation("/login");
     }
   }, [isAuthenticated, loading, setLocation]);
+
+  // Check for article ID in URL params to load existing article
+  useEffect(() => {
+    const urlParams = new URLSearchParams(search);
+    const articleId = urlParams.get('id');
+    
+    if (articleId && user) {
+      loadArticleForEditing(articleId);
+    }
+  }, [search, user]);
+
+  const loadArticleForEditing = async (articleId: string) => {
+    try {
+      const response = await fetch(`/api/articles/${articleId}`);
+      if (response.ok) {
+        const article = await response.json();
+        
+        // Check if user owns this article
+        if (article.authorId !== user?.id) {
+          toast({
+            title: "Access Denied",
+            description: "You can only edit your own articles.",
+            variant: "destructive",
+          });
+          setLocation("/dashboard");
+          return;
+        }
+
+        // Populate form with article data
+        setTitle(article.title || "");
+        setContent(article.content || "");
+        setCategory(article.categoryId || "");
+        setTags(article.tags ? JSON.parse(article.tags).join(', ') : "");
+        setMetaTitle(article.metaTitle || "");
+        setMetaDescription(article.metaDescription || "");
+        setSlug(article.slug || "");
+        setFocusKeyword(""); // Not stored in current schema
+        setIsEditing(true);
+        setEditingArticleId(articleId);
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load article for editing.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error loading article:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load article for editing.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const { data: categories } = useQuery<Category[]>({
     queryKey: ["categories"],
@@ -92,8 +150,13 @@ export default function Editor() {
         published: false, // This is a draft
       };
 
-      const response = await fetch('/api/articles', {
-        method: 'POST',
+      const url = isEditing && editingArticleId 
+        ? `/api/articles/${editingArticleId}` 
+        : '/api/articles';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -101,12 +164,12 @@ export default function Editor() {
       });
 
       if (response.ok) {
-        const newDraft = await response.json();
+        const savedDraft = await response.json();
         toast({
           title: "Draft Saved",
-          description: "Your article has been saved as a draft.",
+          description: isEditing ? "Your article draft has been updated." : "Your article has been saved as a draft.",
         });
-        // Optionally redirect to drafts page or stay here
+        // Stay on the editor page
       } else {
         const error = await response.json();
         toast({
@@ -159,10 +222,16 @@ export default function Editor() {
         metaTitle: metaTitle.trim() || undefined,
         metaDescription: metaDescription.trim() || undefined,
         focusKeyword: focusKeyword.trim() || undefined,
+        published: true, // This is a published article
       };
 
-      const response = await fetch('/api/articles', {
-        method: 'POST',
+      const url = isEditing && editingArticleId 
+        ? `/api/articles/${editingArticleId}` 
+        : '/api/articles';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -170,13 +239,18 @@ export default function Editor() {
       });
 
       if (response.ok) {
-        const newArticle = await response.json();
+        const publishedArticle = await response.json();
+        
+        // Fetch category information to get the slug
+        const categoryResponse = await fetch(`/api/categories/${category}`);
+        const categoryData = await categoryResponse.json();
+        
         toast({
           title: "Article Published",
-          description: "Your article is now live!",
+          description: isEditing ? "Your article has been updated and published." : "Your article is now live!",
         });
-        // Redirect to the article or home
-        setLocation(`/articles/${newArticle.id}`);
+        // Redirect to the category-based article URL
+        setLocation(`/category/${categoryData.slug}/${publishedArticle.slug}`);
       } else {
         const error = await response.json();
         toast({
@@ -202,9 +276,14 @@ export default function Editor() {
       <main className="flex-1 py-8">
         <div className="container mx-auto px-4 max-w-6xl">
           <div className="mb-6">
-            <h1 className="text-3xl font-bold mb-2">Create New Article</h1>
+            <h1 className="text-3xl font-bold mb-2">
+              {isEditing ? 'Edit Article' : 'Create New Article'}
+            </h1>
             <p className="text-muted-foreground">
-              Write engaging content optimized for search engines and readers
+              {isEditing 
+                ? 'Update your article content and settings'
+                : 'Write engaging content optimized for search engines and readers'
+              }
             </p>
           </div>
 
@@ -267,10 +346,12 @@ export default function Editor() {
                   </TabsContent>
                   <TabsContent value="preview">
                     <div className="min-h-[400px] p-4 border rounded-md">
-                      <div className="prose max-w-none font-serif">
-                        <p className="text-muted-foreground">
-                          {content || "Start writing to see preview..."}
-                        </p>
+                      <div className="prose prose-lg max-w-none font-serif">
+                        {content ? (
+                          <div dangerouslySetInnerHTML={{ __html: content }} />
+                        ) : (
+                          <p className="text-muted-foreground">Start writing to see preview...</p>
+                        )}
                       </div>
                     </div>
                   </TabsContent>
@@ -335,8 +416,8 @@ export default function Editor() {
           <DialogHeader>
             <DialogTitle>{title || 'Article Preview'}</DialogTitle>
           </DialogHeader>
-          <div className="prose max-w-none">
-            {title && <h1>{title}</h1>}
+          <div className="prose prose-lg max-w-none">
+            {title && <h1 className="mb-4">{title}</h1>}
             {content ? (
               <div dangerouslySetInnerHTML={{ __html: content }} />
             ) : (

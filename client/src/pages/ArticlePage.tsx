@@ -1,5 +1,6 @@
 import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Badge } from "@/components/ui/badge";
@@ -29,13 +30,30 @@ interface Category {
 }
 
 export default function ArticlePage() {
-  const { slug } = useParams();
+  const params = useParams();
+  const articleSlug = params.articleSlug || params.slug;
+  const categorySlug = params.categorySlug;
 
   const { data: article } = useQuery<Article>({
-    queryKey: ["article", slug],
-    queryFn: () => fetch(`/api/articles/slug/${slug}`).then(r => r.json()),
-    enabled: !!slug,
+    queryKey: ["article", categorySlug, articleSlug],
+    queryFn: () => {
+      if (categorySlug) {
+        // Use category-based API endpoint
+        return fetch(`/api/categories/${categorySlug}/articles/${articleSlug}`).then(r => r.json());
+      } else {
+        // Use regular slug-based API endpoint
+        return fetch(`/api/articles/slug/${articleSlug}`).then(r => r.json());
+      }
+    },
+    enabled: !!articleSlug,
   });
+
+  // Increment article view count when article loads
+  useEffect(() => {
+    if (article?.id) {
+      fetch(`/api/articles/${article.id}/view`, { method: "POST" }).catch(console.error);
+    }
+  }, [article?.id]);
 
   const { data: category } = useQuery<Category>({
     queryKey: ["category", article?.categoryId],
