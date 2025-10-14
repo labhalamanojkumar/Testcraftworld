@@ -7,6 +7,7 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import session from "express-session";
 import { pool } from "./db";
+import mysql from "mysql2/promise";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -16,6 +17,26 @@ const MySQLStore = require('express-mysql-session')(session);
 
 // Parse DATABASE_URL for session store
 const dbUrl = new URL(process.env.DATABASE_URL || 'mysql://root:password@localhost:3306/default');
+
+// Create MySQL connection config for session store
+const mysqlConfig = {
+  host: dbUrl.hostname,
+  port: parseInt(dbUrl.port) || 3306,
+  user: dbUrl.username,
+  password: dbUrl.password,
+  database: dbUrl.pathname.slice(1),
+  ssl: process.env.NODE_ENV === 'production' ? {
+    rejectUnauthorized: false, // Allow self-signed certificates in production
+  } : undefined,
+};
+
+// Create a separate connection pool for session store
+const sessionPool = mysql.createPool({
+  ...mysqlConfig,
+  waitForConnections: true,
+  connectionLimit: 5,
+  queueLimit: 0,
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -47,14 +68,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     resave: false,
     saveUninitialized: false,
     store: new MySQLStore({
-      host: dbUrl.hostname,
-      port: parseInt(dbUrl.port) || 3306,
-      user: dbUrl.username,
-      password: dbUrl.password,
-      database: dbUrl.pathname.slice(1), // Remove leading slash
-      ssl: {
-        rejectUnauthorized: false, // Allow self-signed certificates
-      },
+      connection: sessionPool,
       clearExpired: true,
       checkExpirationInterval: 900000, // 15 minutes
       expiration: 86400000, // 1 day
