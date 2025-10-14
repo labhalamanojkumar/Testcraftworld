@@ -22,15 +22,23 @@ const dbUrl = new URL(process.env.DATABASE_URL || 'mysql://root:password@localho
 function normalizeHost(hostname: string) {
   // allow an explicit override via DB_HOST env var
   const envHost = process.env.DB_HOST;
-  if (envHost) return envHost;
+  if (envHost) {
+    console.log(`Using explicit DB_HOST override: ${envHost}`);
+    return envHost;
+  }
 
-  if (!hostname) return '127.0.0.1';
-
-  // If hostname is localhost or resolves to IPv6 loopback, prefer 127.0.0.1
-  if (hostname === 'localhost' || hostname === '::1' || hostname === '[::1]') {
+  if (!hostname) {
+    console.log('No hostname provided, defaulting to 127.0.0.1');
     return '127.0.0.1';
   }
 
+  // If hostname is localhost or resolves to IPv6 loopback, prefer 127.0.0.1
+  if (hostname === 'localhost' || hostname === '::1' || hostname === '[::1]') {
+    console.log(`Normalizing host '${hostname}' to '127.0.0.1' to avoid IPv6 MySQL connection issues`);
+    return '127.0.0.1';
+  }
+
+  console.log(`Using host as-is: ${hostname}`);
   return hostname;
 }
 
@@ -43,6 +51,13 @@ const mysqlConfig = {
   database: dbUrl.pathname.slice(1),
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
 };
+
+console.log('Session store MySQL config:', {
+  host: mysqlConfig.host,
+  port: mysqlConfig.port,
+  database: mysqlConfig.database,
+  ssl: mysqlConfig.ssl ? 'enabled' : 'disabled'
+});
 
 // Helper to create a session pool with the current config
 function createSessionPool(cfg: any) {
@@ -58,6 +73,7 @@ let sessionPool = createSessionPool(mysqlConfig);
 
 // Try pinging sessionPool; if it fails with ECONNREFUSED and host is 127.0.0.1, attempt an alternate
 async function ensureSessionPool() {
+  console.log('Attempting to establish session DB pool...');
   try {
     const conn = await sessionPool.getConnection();
     try {
@@ -65,7 +81,7 @@ async function ensureSessionPool() {
     } finally {
       conn.release();
     }
-    console.log('Session DB pool connected');
+    console.log('Session DB pool connected successfully');
     return;
   } catch (err: any) {
     console.warn('Session pool ping failed:', err && err.code ? `${err.code} - ${err.message}` : err);
@@ -105,10 +121,10 @@ async function ensureSessionPool() {
   }
 }
 
-// Ensure pool immediately (but do not block module load; caller can await before starting server if desired)
-ensureSessionPool().catch((e) => {
-  console.error('Failed to establish session DB pool on startup:', e && e.code ? `${e.code} - ${e.message}` : e);
-});
+// Ensure pool immediately (but do not block module load; handled in registerRoutes now)
+// ensureSessionPool().catch((e) => {
+//   console.error('Failed to establish session DB pool on startup:', e && e.code ? `${e.code} - ${e.message}` : e);
+// });
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -132,6 +148,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create uploads directory if it doesn't exist
   if (!fs.existsSync('uploads')) {
     fs.mkdirSync('uploads');
+  }
+
+  // Ensure session pool is ready before setting up session store
+  try {
+    await ensureSessionPool();
+  } catch (err) {
+    console.error('Failed to establish session pool, continuing with potentially broken session store:', err);
   }
 
   // Setup session

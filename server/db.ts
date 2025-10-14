@@ -9,10 +9,26 @@ if (!process.env.DATABASE_URL) {
 // Parse the DATABASE_URL to extract connection parameters
 const url = new URL(process.env.DATABASE_URL);
 
+// Normalize host to prefer IPv4 localhost when appropriate (avoid ::1 when MySQL is IPv4-only)
+function normalizeHost(hostname: string) {
+  // allow an explicit override via DB_HOST env var
+  const envHost = process.env.DB_HOST;
+  if (envHost) return envHost;
+
+  if (!hostname) return '127.0.0.1';
+
+  // If hostname is localhost or resolves to IPv6 loopback, prefer 127.0.0.1
+  if (hostname === 'localhost' || hostname === '::1' || hostname === '[::1]') {
+    return '127.0.0.1';
+  }
+
+  return hostname;
+}
+
 // Create an initial mysql2 pool with sensible timeouts and options.
 // This may be replaced later if we detect the DB listens on a different common port.
 export let pool = mysql.createPool({
-  host: url.hostname,
+  host: normalizeHost(url.hostname),
   port: parseInt(url.port),
   user: url.username,
   password: url.password,
