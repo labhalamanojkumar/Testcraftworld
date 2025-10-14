@@ -8,7 +8,7 @@ import session from "express-session";
 import { pool } from "./db";
 
 const require = createRequire(import.meta.url);
-const MySQLStore = require('connect-mysql-session')(session);
+const MySQLStore = require('express-mysql-session')(session);
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
