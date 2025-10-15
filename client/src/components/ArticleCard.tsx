@@ -76,13 +76,25 @@ export default function ArticleCard({
   return (
     <Link href={articleUrl} data-testid={`link-article-${slug}`}>
       <Card className="overflow-hidden hover-elevate active-elevate-2 transition-all cursor-pointer">
-        <div className="aspect-video w-full overflow-hidden">
-          <img
-            src={image}
-            alt={title}
-            className="w-full h-full object-cover"
-            data-testid={`img-article-${slug}`}
-          />
+        <div className="aspect-video w-full overflow-hidden bg-gray-100">
+          {image ? (
+            <img
+              src={image}
+              alt={title}
+              className="w-full h-full object-cover"
+              data-testid={`img-article-${slug}`}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+              {/* simple inline SVG placeholder */}
+              <img
+                src={`data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='450' viewBox='0 0 800 450'><rect width='100%' height='100%' fill='%23f3f4f6'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%239ca3af' font-family='Arial' font-size='24'>No image</text></svg>`}
+                alt="No image"
+                className="w-full h-full object-cover"
+                data-testid={`img-article-placeholder-${slug}`}
+              />
+            </div>
+          )}
         </div>
         <div className="p-4">
           <Badge variant="secondary" className="mb-2" data-testid={`badge-category-${slug}`}>

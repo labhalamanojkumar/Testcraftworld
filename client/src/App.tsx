@@ -20,6 +20,7 @@ import Register from "@/pages/Register";
 import Dashboard from "@/pages/Dashboard";
 import Profile from "@/pages/Profile";
 import NotFound from "@/pages/not-found";
+import AllArticles from "@/pages/AllArticles";
 
 function Router() {
   return (
@@ -33,6 +34,7 @@ function Router() {
       <Route path="/register" component={Register} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/profile" component={Profile} />
+  <Route path="/articles" component={AllArticles} />
       <Route path="/category/:slug" component={CategoryPage} />
       <Route path="/category/:categorySlug/:articleSlug" component={ArticlePage} />
       <Route path="/article/:slug" component={ArticlePage} />

@@ -324,7 +324,7 @@ export default function Dashboard() {
                     ))}
                     {articles.length > 5 && (
                       <div className="text-center pt-4">
-                        <Button variant="outline">
+                        <Button variant="outline" onClick={() => setLocation('/articles')}>
                           View All Articles ({articles.length})
                         </Button>
                       </div>

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { storage } from "./storage";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
@@ -61,6 +62,25 @@ app.use((req, res, next) => {
 
     // Ensure tables exist
     await ensureDatabaseTables();
+
+    // Ensure essential categories exist in the database (fix: missing News/Others)
+    try {
+      const existingCats = await storage.getCategories();
+      const slugs = new Set(existingCats.map((c: any) => c.slug));
+      const defaults = [
+        { name: 'News', slug: 'news', description: 'News articles' },
+        { name: 'Others', slug: 'others', description: 'Other articles' },
+      ];
+
+      for (const cat of defaults) {
+        if (!slugs.has(cat.slug)) {
+          await storage.createCategory(cat as any);
+          console.log(`Created missing category: ${cat.slug}`);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to ensure default categories:', err);
+    }
 
   } catch (err: any) {
     console.error("❌ Database initialization failed:", err.message);

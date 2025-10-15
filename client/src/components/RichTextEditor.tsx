@@ -453,7 +453,51 @@ export default function RichTextEditor({ value, onChange }: RichTextEditorProps)
         ref={quillRef}
         theme="snow"
         value={value}
-        onChange={onChange}
+        onChange={(content, delta, source, editor) => {
+          // Apply live markdown-like conversions for headings and basic formatting
+          try {
+            const quill = quillRef.current?.getEditor();
+            const sel = quill?.getSelection(true);
+
+            // If the user just typed, attempt to convert patterns at line start
+            const text = editor.getText();
+            const lines = text.split('\n');
+            const lastLineIndex = Math.max(0, lines.length - 2);
+            const lastLine = lines[lastLineIndex] || '';
+
+            // Heading conversion: #, ##, ### at line start
+            const headingMatch = lastLine.match(/^(#{1,3})\s+(.*)$/);
+            if (headingMatch && quill) {
+              const hashes = headingMatch[1];
+              const contentText = headingMatch[2];
+              const startIndex = text.lastIndexOf(lastLine);
+              // Replace the line with heading node
+              quill.deleteText(startIndex, lastLine.length);
+              const level = hashes.length; // 1..3
+              quill.insertText(startIndex, contentText, { header: level });
+            }
+
+            // Bold **text** and italic *text* inline conversion
+            // We only attempt small replacements to avoid interfering with typing too much
+            const html = editor.getHTML();
+            const convertedHtml = html
+              .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+              .replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+            if (convertedHtml !== html && quill) {
+              const cursor = sel ? sel.index : undefined;
+              quill.clipboard.dangerouslyPasteHTML(convertedHtml);
+              if (typeof cursor === 'number') {
+                quill.setSelection(cursor, 0);
+              }
+            }
+          } catch (err) {
+            // ignore conversion errors
+            console.debug('Markdown conversion skipped:', err);
+          }
+
+          onChange(content);
+        }}
         modules={modules}
         formats={formats}
         className="min-h-[400px]"

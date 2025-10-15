@@ -50,6 +50,10 @@ export default function Editor() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -57,15 +61,19 @@ export default function Editor() {
     }
   }, [isAuthenticated, loading, setLocation]);
 
-  // Check for article ID in URL params to load existing article
+  // Auto-save functionality
   useEffect(() => {
-    const urlParams = new URLSearchParams(search);
-    const articleId = urlParams.get('id');
-    
-    if (articleId && user) {
-      loadArticleForEditing(articleId);
-    }
-  }, [search, user]);
+    const autoSaveInterval = setInterval(() => {
+      if (hasUnsavedChanges && !isSaving && !isPublishing && title.trim() && content.trim() && user) {
+        // Auto-save draft silently (without toast notification)
+        handleSaveDraft(true).catch(error => {
+          console.error('Auto-save failed:', error);
+        });
+      }
+    }, 30000); // Auto-save every 30 seconds
+
+    return () => clearInterval(autoSaveInterval);
+  }, [hasUnsavedChanges, isSaving, isPublishing, title, content, category, tags, metaTitle, metaDescription, slug, focusKeyword, user, isEditing, editingArticleId]);
 
   const loadArticleForEditing = async (articleId: string) => {
     try {
@@ -117,7 +125,7 @@ export default function Editor() {
     queryFn: () => fetch("/api/categories").then(r => r.json()),
   });
 
-  const handleSaveDraft = async () => {
+  const handleSaveDraft = async (silent = false) => {
     if (!user) {
       toast({
         title: "Error",
@@ -129,13 +137,14 @@ export default function Editor() {
 
     if (!title.trim() || !content.trim()) {
       toast({
-        title: "Error",
+        title: "Validation Error",
         description: "Title and content are required to save a draft.",
         variant: "destructive",
       });
       return;
     }
 
+    setIsSaving(true);
     try {
       const draftData = {
         title: title.trim(),
@@ -165,26 +174,42 @@ export default function Editor() {
 
       if (response.ok) {
         const savedDraft = await response.json();
-        toast({
-          title: "Draft Saved",
-          description: isEditing ? "Your article draft has been updated." : "Your article has been saved as a draft.",
-        });
-        // Stay on the editor page
+        setLastSaved(new Date());
+        setHasUnsavedChanges(false);
+        
+        if (!silent) {
+          toast({
+            title: "Draft Saved",
+            description: isEditing ? "Your article draft has been updated successfully." : "Your article has been saved as a draft.",
+          });
+        }
+        
+        // If this was a new article, update the editing state
+        if (!isEditing) {
+          setIsEditing(true);
+          setEditingArticleId(savedDraft.id);
+          // Update URL without causing a reload
+          window.history.replaceState(null, '', `/editor?id=${savedDraft.id}`);
+        }
       } else {
         const error = await response.json();
-        toast({
-          title: "Save Failed",
-          description: error.message || "Failed to save draft.",
-          variant: "destructive",
-        });
+        if (!silent) {
+          toast({
+            title: "Save Failed",
+            description: error.message || "Failed to save draft. Please try again.",
+            variant: "destructive",
+          });
+        }
       }
     } catch (error) {
       console.error('Save draft error:', error);
       toast({
         title: "Save Failed",
-        description: "An error occurred while saving the draft.",
+        description: "An unexpected error occurred while saving. Please check your connection and try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -195,7 +220,7 @@ export default function Editor() {
   const handlePublish = async () => {
     if (!user) {
       toast({
-        title: "Error",
+        title: "Authentication Error",
         description: "You must be logged in to publish.",
         variant: "destructive",
       });
@@ -204,13 +229,44 @@ export default function Editor() {
 
     if (!title.trim() || !content.trim() || !category) {
       toast({
-        title: "Error",
-        description: "Title, content, and category are required.",
+        title: "Validation Error",
+        description: "Title, content, and category are required to publish.",
         variant: "destructive",
       });
       return;
     }
 
+    // Enhanced validation for content quality
+    const contentText = content.replace(/<[^>]*>/g, '').trim();
+    if (contentText.length < 300) {
+      const confirmed = window.confirm(
+        `Your article content is quite short (${contentText.length} characters). For better reader engagement, we recommend at least 300 words. Do you want to publish anyway?`
+      );
+      if (!confirmed) return;
+    }
+
+    // SEO validation warnings
+    let seoWarnings = [];
+    if (!metaTitle.trim()) {
+      seoWarnings.push("Meta title is missing");
+    } else if (metaTitle.length > 60) {
+      seoWarnings.push("Meta title is too long (over 60 characters)");
+    }
+
+    if (!metaDescription.trim()) {
+      seoWarnings.push("Meta description is missing");
+    } else if (metaDescription.length > 160) {
+      seoWarnings.push("Meta description is too long (over 160 characters)");
+    }
+
+    if (seoWarnings.length > 0) {
+      const confirmed = window.confirm(
+        `SEO Issues Detected:\n${seoWarnings.join('\n')}\n\nDo you want to publish anyway?`
+      );
+      if (!confirmed) return;
+    }
+
+    setIsPublishing(true);
     try {
       const articleData = {
         title: title.trim(),
@@ -240,22 +296,31 @@ export default function Editor() {
 
       if (response.ok) {
         const publishedArticle = await response.json();
+        setLastSaved(new Date());
+        setHasUnsavedChanges(false);
         
         // Fetch category information to get the slug
         const categoryResponse = await fetch(`/api/categories/${category}`);
-        const categoryData = await categoryResponse.json();
-        
-        toast({
-          title: "Article Published",
-          description: isEditing ? "Your article has been updated and published." : "Your article is now live!",
-        });
-        // Redirect to the category-based article URL
-        setLocation(`/category/${categoryData.slug}/${publishedArticle.slug}`);
+        if (categoryResponse.ok) {
+          const categoryData = await categoryResponse.json();
+          toast({
+            title: "Article Published",
+            description: isEditing ? "Your article has been updated and published successfully!" : "Your article is now live!",
+          });
+          // Redirect to the category-based article URL
+          setLocation(`/category/${categoryData.slug}/${publishedArticle.slug}`);
+        } else {
+          toast({
+            title: "Article Published",
+            description: "Article published successfully, but there was an issue with redirection.",
+          });
+          setLocation('/articles');
+        }
       } else {
         const error = await response.json();
         toast({
           title: "Publish Failed",
-          description: error.message || "Failed to publish article.",
+          description: error.message || "Failed to publish article. Please try again.",
           variant: "destructive",
         });
       }
@@ -263,9 +328,11 @@ export default function Editor() {
       console.error('Publish error:', error);
       toast({
         title: "Publish Failed",
-        description: "An error occurred while publishing.",
+        description: "An unexpected error occurred while publishing. Please check your connection and try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -360,17 +427,30 @@ export default function Editor() {
             </div>
 
             <div className="space-y-6">
-              <Card className="p-6">
-                <h3 className="font-bold mb-4">Actions</h3>
+            <Card className="p-6">
+                <h3 className="font-bold mb-4 flex items-center justify-between">
+                  Actions
+                  {hasUnsavedChanges && (
+                    <span className="text-sm text-orange-600 font-normal">
+                      • Unsaved changes
+                    </span>
+                  )}
+                </h3>
+                {lastSaved && (
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Last saved: {lastSaved.toLocaleTimeString()}
+                  </p>
+                )}
                 <div className="space-y-2">
                   <Button
                     variant="outline"
                     className="w-full justify-start"
-                    onClick={handleSaveDraft}
+                    onClick={() => handleSaveDraft()}
+                    disabled={isSaving || isPublishing}
                     data-testid="button-save-draft"
                   >
                     <Save className="h-4 w-4 mr-2" />
-                    Save Draft
+                    {isSaving ? "Saving..." : "Save Draft"}
                   </Button>
                   <Button
                     variant="outline"
@@ -385,10 +465,11 @@ export default function Editor() {
                     variant="default"
                     className="w-full justify-start"
                     onClick={handlePublish}
+                    disabled={isSaving || isPublishing}
                     data-testid="button-publish"
                   >
                     <Send className="h-4 w-4 mr-2" />
-                    Publish
+                    {isPublishing ? "Publishing..." : "Publish"}
                   </Button>
                 </div>
               </Card>
@@ -414,16 +495,57 @@ export default function Editor() {
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{title || 'Article Preview'}</DialogTitle>
+            <DialogTitle className="flex items-center justify-between">
+              <span>{title || 'Article Preview'}</span>
+              <span className="text-sm font-normal text-muted-foreground">
+                {isEditing ? 'Draft' : 'New Article'}
+              </span>
+            </DialogTitle>
           </DialogHeader>
-          <div className="prose prose-lg max-w-none">
-            {title && <h1 className="mb-4">{title}</h1>}
+          
+          {/* SEO Preview */}
+          <div className="mb-6 p-4 border rounded-lg bg-muted/30">
+            <h4 className="font-semibold mb-2">Search Result Preview</h4>
+            <div className="space-y-2">
+              <div className="text-blue-600 text-lg hover:underline cursor-pointer">
+                {metaTitle || title || 'Article Title'}
+              </div>
+              <div className="text-green-700 text-sm">
+                https://testcraft.world/article/{slug || 'article-slug'}
+              </div>
+              <div className="text-gray-600 text-sm">
+                {metaDescription || (content ? content.replace(/<[^>]*>/g, '').substring(0, 160) + '...' : 'Article description...')}
+              </div>
+            </div>
+          </div>
+
+          {/* Article Content Preview */}
+          <div className="prose prose-lg max-w-none mb-6">
+            {title && <h1 className="mb-4 text-3xl font-bold">{title}</h1>}
             {content ? (
               <div dangerouslySetInnerHTML={{ __html: content }} />
             ) : (
               <p className="text-muted-foreground">Start writing to see preview...</p>
             )}
           </div>
+
+          {/* Article Metadata */}
+          {(category || tags) && (
+            <div className="border-t pt-4">
+              <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                {category && categories && (
+                  <span>
+                    Category: <span className="font-medium">{categories.find(c => c.id === category)?.name}</span>
+                  </span>
+                )}
+                {tags && (
+                  <span>
+                    Tags: <span className="font-medium">{tags}</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
       

@@ -15,7 +15,8 @@ import RichTextEditor from "@/components/RichTextEditor";
 import SEOFields from "@/components/SEOFields";
 import Header from "@/components/Header";
 import AnalyticsDashboard from "@/components/AnalyticsDashboard";
-import { Save, Eye, Send, Plus, LayoutDashboard, FileText, Users, BarChart3 } from "lucide-react";
+import { Save, Eye, Send, Plus, LayoutDashboard, FileText, Users, BarChart3, Key, Code } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface User {
   id: string;
@@ -67,15 +68,31 @@ export default function Admin() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(credentials),
       });
-      if (!res.ok) throw new Error("Login failed");
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: "Network error" }));
+        throw new Error(errorData.message || "Login failed");
+      }
+
       return res.json();
     },
     onSuccess: (data) => {
-      setUser(data.user);
+      // Ensure logged in user is an admin
+      const loggedInUser = data.user as any;
+      if (loggedInUser?.role !== 'admin' && loggedInUser?.role !== 'superadmin') {
+        toast({ title: "Access denied", description: "Admin access required", variant: 'destructive' });
+        return;
+      }
+
+      setUser(loggedInUser);
       toast({ title: "Logged in successfully" });
     },
-    onError: () => {
-      toast({ title: "Login failed", variant: "destructive" });
+    onError: (error: any) => {
+      toast({
+        title: "Login Failed",
+        description: error.message || "Invalid username or password",
+        variant: "destructive"
+      });
     },
   });
 
@@ -105,15 +122,35 @@ export default function Admin() {
   });
 
   const createArticleMutation = useMutation({
-    mutationFn: (article: typeof newArticle) => fetch("/api/articles", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(article),
-    }).then(r => r.json()),
-    onSuccess: () => {
+    mutationFn: async (article: typeof newArticle) => {
+      const res = await fetch("/api/articles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(article),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: "Network error" }));
+        throw new Error(errorData.error || "Failed to create article");
+      }
+
+      return res.json();
+    },
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["articles"] });
       setNewArticle({ title: "", content: "", excerpt: "", categoryId: "", slug: "", metaTitle: "", metaDescription: "", tags: "", published: false });
-      toast({ title: "Article created" });
+      toast({
+        title: "Article Published Successfully",
+        description: `"${data.title}" has been published.`,
+      });
+    },
+    onError: (error: any) => {
+      console.error("Article creation error:", error);
+      toast({
+        title: "Failed to Publish Article",
+        description: error.message || "An error occurred while publishing the article",
+        variant: "destructive"
+      });
     },
   });
 
@@ -148,7 +185,7 @@ export default function Admin() {
       <Header />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <LayoutDashboard className="h-4 w-4" />
               Dashboard
@@ -164,6 +201,10 @@ export default function Admin() {
             <TabsTrigger value="categories" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               Categories
+            </TabsTrigger>
+            <TabsTrigger value="api" className="flex items-center gap-2">
+              <Code className="h-4 w-4" />
+              API
             </TabsTrigger>
             <TabsTrigger value="create" className="flex items-center gap-2">
               <Plus className="h-4 w-4" />
@@ -399,6 +440,153 @@ export default function Admin() {
                   />
                 </Card>
               </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="api">
+            <div className="space-y-6">
+              <Card className="p-6">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <Code className="h-5 w-5" />
+                  API Integration for AI Tools
+                </h2>
+                <p className="text-muted-foreground mb-4">
+                  Generate API keys to allow external AI tools and agents to interact with your blog platform.
+                  Use these APIs for content generation, analytics, and automation.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div className="p-4 border rounded-lg">
+                    <h3 className="font-semibold mb-2">API Documentation</h3>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Complete OpenAPI specification for all endpoints
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open('/api-docs', '_blank')}
+                    >
+                      View API Docs
+                    </Button>
+                  </div>
+
+                  <div className="p-4 border rounded-lg">
+                    <h3 className="font-semibold mb-2">Available Endpoints</h3>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li>• Content Generation</li>
+                      <li>• Content Analysis</li>
+                      <li>• SEO Optimization</li>
+                      <li>• Analytics Insights</li>
+                    </ul>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-bold flex items-center gap-2">
+                    <Key className="h-5 w-5" />
+                    API Keys
+                  </h3>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create API Key
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Create New API Key</DialogTitle>
+                      </DialogHeader>
+                      <form onSubmit={(e) => {
+                        e.preventDefault();
+                        // Create API key logic will be added
+                        toast({ title: "API Key created", description: "New API key has been generated." });
+                      }}>
+                        <div className="space-y-4">
+                          <div>
+                            <Label htmlFor="key-name">Key Name</Label>
+                            <Input id="key-name" placeholder="e.g., ChatGPT Integration" required />
+                          </div>
+                          <div>
+                            <Label>Permissions</Label>
+                            <div className="space-y-2 mt-2">
+                              {[
+                                { id: 'content:generate', label: 'Generate Content' },
+                                { id: 'content:analyze', label: 'Analyze Content' },
+                                { id: 'seo:optimize', label: 'SEO Optimization' },
+                                { id: 'insights:read', label: 'Read Insights' },
+                              ].map((perm) => (
+                                <div key={perm.id} className="flex items-center space-x-2">
+                                  <input type="checkbox" id={perm.id} defaultChecked />
+                                  <Label htmlFor={perm.id} className="text-sm">{perm.label}</Label>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <Button type="submit" className="w-full">Create Key</Button>
+                        </div>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+
+                <div className="space-y-3">
+                  {/* Mock API keys for demonstration */}
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                      <p className="font-medium">ChatGPT Integration</p>
+                      <p className="text-sm text-muted-foreground">bkp_a1b2c3d4e5f6...</p>
+                      <p className="text-xs text-muted-foreground">Last used: 2 hours ago</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">Active</Badge>
+                      <Button variant="outline" size="sm">Revoke</Button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                      <p className="font-medium">Content Automation</p>
+                      <p className="text-sm text-muted-foreground">bkp_x7y8z9w0v1u...</p>
+                      <p className="text-xs text-muted-foreground">Last used: Never</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">Active</Badge>
+                      <Button variant="outline" size="sm">Revoke</Button>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <h3 className="text-lg font-bold mb-4">Usage Examples</h3>
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-semibold mb-2">Generate Blog Content</h4>
+                    <pre className="bg-muted p-3 rounded text-sm overflow-x-auto">
+{`curl -X POST http://localhost:3000/api/ai/generate-content \\
+  -H "X-API-Key: your-api-key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "topic": "React Best Practices",
+    "type": "article",
+    "keywords": ["react", "javascript", "frontend"],
+    "tone": "professional"
+  }'`}
+                    </pre>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold mb-2">Get Analytics Insights</h4>
+                    <pre className="bg-muted p-3 rounded text-sm overflow-x-auto">
+{`curl -X GET "http://localhost:3000/api/ai/insights?type=performance&timeframe=30d" \\
+  -H "X-API-Key: your-api-key"`}
+                    </pre>
+                  </div>
+                </div>
+              </Card>
             </div>
           </TabsContent>
         </Tabs>

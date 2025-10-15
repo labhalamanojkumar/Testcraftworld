@@ -74,20 +74,36 @@ export default function CategoryPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {articles?.map((article) => (
-              <ArticleCard
-                key={article.slug}
-                slug={article.slug}
-                title={article.title}
-                excerpt={article.excerpt || ""}
-                category={category.name}
-                categorySlug={category.slug}
-                image="" // Placeholder
-                author="Author"
-                date={new Date(article.createdAt).toLocaleDateString()}
-                readTime="5 min read"
-              />
-            ))}
+            {articles?.map((article) => {
+              // Extract first image src from article.content HTML to use as thumbnail
+              let imageSrc = '';
+              try {
+                if (article.content) {
+                  const parser = new DOMParser();
+                  const doc = parser.parseFromString(article.content, 'text/html');
+                  const img = doc.querySelector('img');
+                  imageSrc = img?.getAttribute('src') || '';
+                }
+              } catch (err) {
+                // ignore parsing errors
+                imageSrc = '';
+              }
+
+              return (
+                <ArticleCard
+                  key={article.slug}
+                  slug={article.slug}
+                  title={article.title}
+                  excerpt={article.excerpt || ''}
+                  category={category.name}
+                  categorySlug={category.slug}
+                  image={imageSrc}
+                  author="Author"
+                  date={new Date(article.createdAt).toLocaleDateString()}
+                  readTime="5 min read"
+                />
+              );
+            })}
           </div>
 
           {articles?.length === 0 && (

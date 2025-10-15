@@ -85,6 +85,19 @@ export const pageViews = mysqlTable("page_views", {
   categoryId: varchar("category_id", { length: 36 }).references(() => categories.id),
 });
 
+// API Keys table for external AI tool integration
+export const apiKeys = mysqlTable("api_keys", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
+  name: varchar("name", { length: 255 }).notNull(),
+  key: varchar("key", { length: 255 }).notNull().unique(),
+  hashedKey: text("hashed_key").notNull(),
+  permissions: text("permissions").notNull(), // JSON string of permissions array
+  createdBy: varchar("created_by", { length: 36 }).references(() => users.id),
+  createdAt: datetime("created_at").default(sql`NOW()`),
+  lastUsed: datetime("last_used"),
+  isActive: boolean("is_active").default(true),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   email: true,
@@ -155,6 +168,17 @@ export const insertPageViewSchema = createInsertSchema(pageViews).pick({
   categoryId: true,
 });
 
+export const insertApiKeySchema = createInsertSchema(apiKeys).pick({
+  name: true,
+  key: true,
+  hashedKey: true,
+  permissions: true,
+  createdBy: true,
+  createdAt: true,
+  lastUsed: true,
+  isActive: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
@@ -167,3 +191,5 @@ export type InsertSession = z.infer<typeof insertSessionSchema>;
 export type Session = typeof sessions.$inferSelect;
 export type InsertPageView = z.infer<typeof insertPageViewSchema>;
 export type PageView = typeof pageViews.$inferSelect;
+export type InsertApiKey = z.infer<typeof insertApiKeySchema>;
+export type ApiKey = typeof apiKeys.$inferSelect;

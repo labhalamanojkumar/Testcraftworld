@@ -21,6 +21,20 @@ export function log(message: string, source = "express") {
 }
 
 export async function setupVite(app: Express, server: Server) {
+  // Ensure uploads served directly from server (dev) before Vite middleware
+  const uploadsPath = path.resolve(process.cwd(), 'uploads');
+  if (!fs.existsSync(uploadsPath)) {
+    try {
+      fs.mkdirSync(uploadsPath, { recursive: true });
+      log(`Created uploads directory at ${uploadsPath}`, 'setup');
+    } catch (e) {
+      log(`Failed to create uploads directory: ${String(e)}`, 'setup');
+    }
+  }
+  app.use('/uploads', express.static(uploadsPath));
+  // If file not found in uploads, return 404 instead of falling through to index.html
+  app.use('/uploads', (_req, res) => res.status(404).send('Not found'));
+
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },

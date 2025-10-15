@@ -17,7 +17,10 @@ export interface IStorage {
   getCategory(id: string): Promise<Category | undefined>;
   createCategory(category: InsertCategory): Promise<Category>;
   getArticles(): Promise<Article[]>;
+  // Paginated articles (published only)
+  getArticlesPaginated(page: number, limit: number, includeDrafts?: boolean, userId?: string): Promise<{ items: Article[]; total: number }>;
   getArticle(id: string): Promise<Article | undefined>;
+  getArticleBySlug(slug: string): Promise<Article | undefined>;
   getArticlesByCategory(categoryId: string): Promise<Article[]>;
   getArticlesByAuthor(authorId: string): Promise<Article[]>;
   createArticle(article: InsertArticle): Promise<Article>;
@@ -166,8 +169,30 @@ export class MemStorage implements IStorage {
     return Array.from(this.articles.values()).filter(a => a.published);
   }
 
+  async getArticlesPaginated(page: number, limit: number, includeDrafts = false, userId?: string): Promise<{ items: Article[]; total: number }> {
+    let all = Array.from(this.articles.values());
+    if (!includeDrafts) {
+      all = all.filter(a => a.published);
+    } else if (includeDrafts && userId) {
+      // include published and drafts authored by user
+      all = all.filter(a => a.published || a.authorId === userId);
+    } else if (includeDrafts && !userId) {
+      // include all (published + drafts)
+      // keep all as-is
+    }
+
+    const total = all.length;
+    const start = Math.max(0, (page - 1) * limit);
+    const items = all.slice(start, start + limit);
+    return { items, total };
+  }
+
   async getArticle(id: string): Promise<Article | undefined> {
     return this.articles.get(id);
+  }
+
+  async getArticleBySlug(slug: string): Promise<Article | undefined> {
+    return Array.from(this.articles.values()).find(a => a.slug === slug);
   }
 
   async getArticlesByCategory(categoryId: string): Promise<Article[]> {
@@ -575,9 +600,64 @@ export class DbStorage implements IStorage {
     return await db.select().from(articles).where(eq(articles.published, true));
   }
 
+  async getArticlesPaginated(page: number, limit: number, includeDrafts = false, userId?: string): Promise<{ items: Article[]; total: number }> {
+    const offset = Math.max(0, (page - 1) * limit);
+
+    // Build where clause based on includeDrafts and userId
+    const publishedCondition = eq(articles.published, true);
+
+    let totalQuery;
+    let rowsQuery;
+
+    if (!includeDrafts) {
+      totalQuery = db.select({ count: sql<number>`count(*)` }).from(articles).where(publishedCondition);
+      rowsQuery = db
+        .select()
+        .from(articles)
+        .where(publishedCondition)
+        .orderBy(sql`${articles.createdAt} desc`)
+        .limit(limit)
+        .offset(offset);
+    } else if (includeDrafts && userId) {
+      // published OR authored by user
+      totalQuery = db
+        .select({ count: sql<number>`count(*)` })
+        .from(articles)
+        .where(sql`(${articles.published} = 1 OR ${articles.authorId} = ${userId})`);
+
+      rowsQuery = db
+        .select()
+        .from(articles)
+        .where(sql`(${articles.published} = 1 OR ${articles.authorId} = ${userId})`)
+        .orderBy(sql`${articles.createdAt} desc`)
+        .limit(limit)
+        .offset(offset);
+    } else {
+      // include all (published + drafts) - admin scenario
+      totalQuery = db.select({ count: sql<number>`count(*)` }).from(articles);
+      rowsQuery = db
+        .select()
+        .from(articles)
+        .orderBy(sql`${articles.createdAt} desc`)
+        .limit(limit)
+        .offset(offset);
+    }
+
+    const [countRow] = await totalQuery;
+    const total = countRow?.count || 0;
+    const rows = await rowsQuery;
+
+    return { items: rows, total };
+  }
+
   async getArticle(id: string): Promise<Article | undefined> {
     const result = await db.select().from(articles).where(eq(articles.id, id)).limit(1);
     return result[0];
+  }
+
+  async getArticleBySlug(slug: string): Promise<Article | undefined> {
+    const result = await db.select().from(articles).where(eq(articles.slug, slug)).limit(1);
+    return result[0] as Article | undefined;
   }
 
   async getArticlesByCategory(categoryId: string): Promise<Article[]> {
