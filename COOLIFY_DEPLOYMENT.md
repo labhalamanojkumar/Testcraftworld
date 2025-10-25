@@ -23,19 +23,32 @@ This guide will help you deploy BlogStreamPro to Coolify VPS.
 In Coolify, set the following environment variables for your application:
 
 ```bash
-# Database (Required)
-DATABASE_URL=mysql://username:password@mysql_container:3306/database?ssl-mode=REQUIRED
-
-# Application (Auto-configured by Coolify)
+# Required Variables
 NODE_ENV=production
 PORT=${{PORT}}
-
-# Security (Required)
 SESSION_SECRET=your-super-secret-session-key-change-this-in-production
+DATABASE_URL=mysql://username:password@mysql_container:3306/database?ssl-mode=REQUIRED
 
-# Admin Credentials (Optional - defaults will be used if not set)
+# Optional: Admin Credentials (defaults will be used if not set)
 SUPER_ADMIN_USERNAME=superadmin
 SUPER_ADMIN_PASSWORD=securepassword123
+
+# Optional: File Storage (choose one)
+# For AWS S3:
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+AWS_REGION=us-east-1
+S3_BUCKET=your-bucket-name
+
+# For Cloudinary:
+CLOUDINARY_URL=cloudinary://api_key:api_secret@cloud_name
+
+# Alternative: Individual DB variables (if not using DATABASE_URL)
+DB_HOST=mysql_container
+DB_PORT=3306
+DB_USER=username
+DB_PASSWORD=password
+DB_NAME=database
 ```
 
 ### 3. Set Up Database
@@ -43,6 +56,25 @@ SUPER_ADMIN_PASSWORD=securepassword123
 1. In Coolify, create a new MySQL database service
 2. Note the database credentials and connection URL
 3. Update the `DATABASE_URL` environment variable in your application
+
+### 4. Configure File Storage (Optional)
+
+Choose one of the following options for file uploads:
+
+**Option A: AWS S3 (Recommended for production)**
+1. Create an S3 bucket in AWS
+2. Create an IAM user with S3 permissions
+3. Set the AWS environment variables in Coolify
+
+**Option B: Cloudinary**
+1. Create a Cloudinary account
+2. Get your cloud name, API key, and API secret
+3. Set the `CLOUDINARY_URL` environment variable
+
+**Option C: Local Storage (Default)**
+- No additional configuration needed
+- Files will be stored in the container's `/app/uploads` directory
+- **Note**: Files will be lost if the container is redeployed. Consider adding a persistent volume in Coolify for `/app/uploads`
 
 ## Default Credentials
 
@@ -79,6 +111,16 @@ Once deployed, Coolify will provide a domain for your application. You can acces
 | `SESSION_SECRET` | Session encryption key | Yes | - | `a24319eb1c35038c48dc9c4cdbc964e56da9d6290e8898fc1ca00309c88d0ecf` |
 | `SUPER_ADMIN_USERNAME` | Admin username | No | superadmin | `superadmin` |
 | `SUPER_ADMIN_PASSWORD` | Admin password | No | securepassword123 | `securepassword123` |
+| `AWS_ACCESS_KEY_ID` | AWS S3 access key | No | - | `AKIAIOSFODNN7EXAMPLE` |
+| `AWS_SECRET_ACCESS_KEY` | AWS S3 secret key | No | - | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` |
+| `AWS_REGION` | AWS region | No | us-east-1 | `us-east-1` |
+| `S3_BUCKET` | S3 bucket name | No | - | `my-blog-uploads` |
+| `CLOUDINARY_URL` | Cloudinary connection URL | No | - | `cloudinary://api_key:api_secret@cloud_name` |
+| `DB_HOST` | Database host | No | - | `mysql_container` |
+| `DB_PORT` | Database port | No | 3306 | `3306` |
+| `DB_USER` | Database username | No | - | `mysql` |
+| `DB_PASSWORD` | Database password | No | - | `generated_password` |
+| `DB_NAME` | Database name | No | - | `database` |
 
 ## Troubleshooting
 

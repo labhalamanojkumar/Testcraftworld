@@ -25,6 +25,9 @@ import {
   listApiKeys,
   createApiKey,
   deleteApiKey,
+  updateApiKey,
+  regenerateApiKey,
+  getApiKeyStats,
   validateApiKey
 } from "./ai-routes";
 import { swaggerSpec, swaggerUiOptions } from "./swagger";
@@ -253,11 +256,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(categories);
   });
 
+  // Get category by slug (more specific route first)
   app.get("/api/categories/slug/:slug", async (req, res) => {
     const categories = await storage.getCategories();
     const category = categories.find(c => c.slug === req.params.slug);
     if (!category) return res.status(404).json({ error: "Category not found" });
     res.json(category);
+  });
+
+  // Get category by ID (generic route after specific routes)
+  app.get("/api/categories/:id", async (req, res) => {
+    try {
+      const categories = await storage.getCategories();
+      const category = categories.find(c => c.id === req.params.id);
+      if (!category) return res.status(404).json({ error: "Category not found" });
+      res.json(category);
+    } catch (error) {
+      console.error("Get category by ID error:", error);
+      res.status(500).json({ error: "Failed to fetch category" });
+    }
   });
 
   app.get("/api/articles/slug/:slug", async (req, res) => {
@@ -743,6 +760,134 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Likes routes
+  app.post("/api/articles/:id/like", async (req, res) => {
+    try {
+      const articleId = req.params.id;
+      const userId = (req.user as any)?.id || null;
+      const ipAddress = req.ip || req.headers['x-forwarded-for'] as string || null;
+
+      // Check if user/IP already liked this article
+      const existingLike = await storage.getUserLike(articleId, userId, ipAddress);
+      
+      if (existingLike) {
+        // Unlike - remove the like
+        await storage.deleteLike(articleId, userId, ipAddress);
+        const count = await storage.getLikesCount(articleId);
+        return res.json({ liked: false, count });
+      } else {
+        // Like - add the like
+        await storage.createLike({
+          articleId,
+          userId,
+          ipAddress,
+        });
+        const count = await storage.getLikesCount(articleId);
+        return res.json({ liked: true, count });
+      }
+    } catch (error) {
+      console.error("Like error:", error);
+      res.status(500).json({ error: "Failed to process like" });
+    }
+  });
+
+  app.get("/api/articles/:id/likes", async (req, res) => {
+    try {
+      const articleId = req.params.id;
+      const userId = (req.user as any)?.id || null;
+      const ipAddress = req.ip || req.headers['x-forwarded-for'] as string || null;
+
+      const count = await storage.getLikesCount(articleId);
+      const userLike = await storage.getUserLike(articleId, userId, ipAddress);
+
+      res.json({
+        count,
+        liked: !!userLike,
+      });
+    } catch (error) {
+      console.error("Get likes error:", error);
+      res.status(500).json({ error: "Failed to fetch likes" });
+    }
+  });
+
+  // Comments routes
+  app.post("/api/articles/:id/comments", async (req, res) => {
+    try {
+      const articleId = req.params.id;
+      const { content, authorName, authorEmail, parentId } = req.body;
+      const userId = (req.user as any)?.id || null;
+
+      // Validation
+      if (!content || content.trim().length === 0) {
+        return res.status(400).json({ error: "Comment content is required" });
+      }
+
+      // If not logged in, require name and email
+      if (!userId && (!authorName || !authorEmail)) {
+        return res.status(400).json({ error: "Name and email are required for guest comments" });
+      }
+
+      const comment = await storage.createComment({
+        articleId,
+        userId,
+        parentId: parentId || null,
+        content: content.trim(),
+        authorName: authorName || null,
+        authorEmail: authorEmail || null,
+        isApproved: true, // Auto-approve for now
+      });
+
+      res.json(comment);
+    } catch (error) {
+      console.error("Create comment error:", error);
+      res.status(500).json({ error: "Failed to create comment" });
+    }
+  });
+
+  app.get("/api/articles/:id/comments", async (req, res) => {
+    try {
+      const articleId = req.params.id;
+      const comments = await storage.getCommentsByArticle(articleId);
+      const count = await storage.getCommentsCount(articleId);
+
+      res.json({ comments, count });
+    } catch (error) {
+      console.error("Get comments error:", error);
+      res.status(500).json({ error: "Failed to fetch comments" });
+    }
+  });
+
+  app.put("/api/comments/:id", async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+    try {
+      const { content } = req.body;
+      if (!content || content.trim().length === 0) {
+        return res.status(400).json({ error: "Comment content is required" });
+      }
+
+      const comment = await storage.updateComment(req.params.id, content.trim());
+      if (!comment) return res.status(404).json({ error: "Comment not found" });
+
+      res.json(comment);
+    } catch (error) {
+      console.error("Update comment error:", error);
+      res.status(500).json({ error: "Failed to update comment" });
+    }
+  });
+
+  app.delete("/api/comments/:id", async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+    try {
+      const deleted = await storage.deleteComment(req.params.id);
+      res.json({ success: deleted });
+    } catch (error) {
+      console.error("Delete comment error:", error);
+      res.status(500).json({ error: "Failed to delete comment" });
+    }
+  });
+
   // AI routes with API key authentication
   app.post("/api/ai/generate-content", validateApiKey, generateContent);
   app.post("/api/ai/analyze-content", validateApiKey, analyzeContent);
@@ -752,7 +897,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // API keys management routes (require session auth)
   app.get("/api/admin/api-keys", listApiKeys);
   app.post("/api/admin/api-keys", createApiKey);
-  app.delete("/api/admin/api-keys/:id", deleteApiKey);
+  app.post("/api/admin/api-keys/:id/regenerate", regenerateApiKey);
+  app.get("/api/admin/api-keys/:id/stats", getApiKeyStats);
+  app.put("/api/admin/api-keys/:id", updateApiKey);
+  app.delete("/api/admin/api-keys/:id", deleteApiKey); // Handles both soft and hard delete based on query param
 
   // Swagger documentation
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions));

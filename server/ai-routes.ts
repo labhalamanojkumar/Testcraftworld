@@ -39,14 +39,47 @@ export const validateApiKey = async (req: Request, res: Response, next: any) => 
       return res.status(401).json({ error: 'Invalid or inactive API key' });
     }
 
-    // Update last used timestamp
+    const key = keyRecord[0];
+
+    // Check if key has expired
+    if (key.expiresAt && new Date(key.expiresAt) < new Date()) {
+      return res.status(401).json({ error: 'API key has expired' });
+    }
+
+    // Check IP whitelist if configured
+    if (key.allowedIps) {
+      try {
+        const allowedIps = JSON.parse(key.allowedIps as string);
+        const clientIp = req.ip || req.headers['x-forwarded-for'] as string;
+        if (allowedIps.length > 0 && !allowedIps.includes(clientIp)) {
+          return res.status(403).json({ error: 'IP address not authorized' });
+        }
+      } catch (e) {
+        console.error('Error parsing allowed IPs:', e);
+      }
+    }
+
+    // Check rate limit (simple hourly check)
+    const usageCount = key.usageCount || 0;
+    const rateLimit = key.rateLimit || 100;
+    
+    // In production, implement proper rate limiting with time windows
+    // For now, just check total usage
+    if (usageCount >= rateLimit * 24) { // Daily limit approximation
+      return res.status(429).json({ error: 'Rate limit exceeded' });
+    }
+
+    // Update last used timestamp and increment usage count
     await db
       .update(apiKeys)
-      .set({ lastUsed: new Date() })
-      .where(eq(apiKeys.id, keyRecord[0].id));
+      .set({ 
+        lastUsed: new Date(),
+        usageCount: sql`${apiKeys.usageCount} + 1`
+      })
+      .where(eq(apiKeys.id, key.id));
 
     // Attach key info to request
-    (req as any).apiKey = keyRecord[0];
+    (req as any).apiKey = key;
     next();
   } catch (error) {
     console.error('API key validation error:', error);
@@ -130,36 +163,18 @@ export const generateContent = async (req: Request, res: Response) => {
     const generatedContent = await mockContentGeneration({
       topic,
       type,
-      keywords: keywords || [],
-      tone: tone || 'professional',
-      length: length || 'medium',
-      targetAudience
-    });
-
-    // If generating an article, we could optionally auto-save it
-    if (type === 'article' && categoryId) {
-      // This would be optional - AI can generate and return content without saving
-    }
-
-    res.json({
-      content: generatedContent.content,
-      title: generatedContent.title,
-      excerpt: generatedContent.excerpt,
-      tags: generatedContent.tags,
-      seoScore: generatedContent.seoScore,
-      generatedAt: new Date().toISOString(),
-      metadata: {
-        type,
-        topic,
+        categoryId,
+        keywords,
         tone,
         length,
-        wordCount: generatedContent.wordCount
-      }
-    });
-  } catch (error) {
-    console.error('Content generation error:', error);
-    res.status(500).json({ error: 'Content generation failed' });
-  }
+        targetAudience
+      });
+
+      res.json(generatedContent);
+    } catch (error) {
+      console.error('Generate content error:', error);
+      res.status(500).json({ error: 'Content generation failed' });
+    }
 };
 
 /**
@@ -433,19 +448,65 @@ export const listApiKeys = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
-    const keys = await db
-      .select({
+    const user = req.user as any;
+    const includeInactive = (req.query.includeInactive === 'true');
+    
+    // Superadmin can see all keys, regular users see only their own
+    let query;
+    if (user.role === 'superadmin' || user.role === 'admin') {
+      query = db.select({
         id: apiKeys.id,
         name: apiKeys.name,
+        key: sql`CONCAT(SUBSTRING(${apiKeys.key}, 1, 8), '...')`.as('maskedKey'),
         permissions: apiKeys.permissions,
+        scopes: apiKeys.scopes,
+        rateLimit: apiKeys.rateLimit,
+        allowedIps: apiKeys.allowedIps,
+        expiresAt: apiKeys.expiresAt,
         createdAt: apiKeys.createdAt,
         lastUsed: apiKeys.lastUsed,
+        usageCount: apiKeys.usageCount,
         isActive: apiKeys.isActive,
-      })
-      .from(apiKeys)
-      .where(eq(apiKeys.createdBy, (req.user as any).id));
+        metadata: apiKeys.metadata,
+        createdBy: apiKeys.createdBy,
+      }).from(apiKeys);
+      if (!includeInactive) {
+        query = query.where(eq(apiKeys.isActive, true));
+      }
+    } else {
+      query = db.select({
+        id: apiKeys.id,
+        name: apiKeys.name,
+        key: sql`CONCAT(SUBSTRING(${apiKeys.key}, 1, 8), '...')`.as('maskedKey'),
+        permissions: apiKeys.permissions,
+        scopes: apiKeys.scopes,
+        rateLimit: apiKeys.rateLimit,
+        allowedIps: apiKeys.allowedIps,
+        expiresAt: apiKeys.expiresAt,
+        createdAt: apiKeys.createdAt,
+        lastUsed: apiKeys.lastUsed,
+        usageCount: apiKeys.usageCount,
+        isActive: apiKeys.isActive,
+        metadata: apiKeys.metadata,
+      }).from(apiKeys).where(
+        includeInactive
+          ? eq(apiKeys.createdBy, user.id)
+          : and(eq(apiKeys.createdBy, user.id), eq(apiKeys.isActive, true))
+      );
+    }
 
-    res.json(keys);
+    const keys = await query;
+
+    // Parse JSON fields
+    const formattedKeys = keys.map(key => ({
+      ...key,
+      permissions: key.permissions ? JSON.parse(key.permissions as string) : [],
+      scopes: key.scopes ? JSON.parse(key.scopes as string) : null,
+      allowedIps: key.allowedIps ? JSON.parse(key.allowedIps as string) : null,
+      metadata: key.metadata ? JSON.parse(key.metadata as string) : null,
+    }));
+
+    res.json(formattedKeys);
   } catch (error) {
     console.error('List API keys error:', error);
     res.status(500).json({ error: 'Failed to list API keys' });
@@ -456,11 +517,22 @@ export const createApiKey = async (req: Request, res: Response) => {
   try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { name, permissions } = req.body;
+    const user = req.user as any;
+    
+    // Check if user is admin or superadmin
+    if (user.role !== 'admin' && user.role !== 'superadmin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { name, permissions, scopes, rateLimit, allowedIps, expiresAt, metadata } = req.body;
+
+    if (!name || !permissions) {
+      return res.status(400).json({ error: 'Name and permissions are required' });
+    }
 
     // Generate API key
     const key = `bkp_${randomUUID().replace(/-/g, '')}`;
-    const hashedKey = key; // In production, hash this
+    const hashedKey = key; // In production, use bcrypt or similar
 
     const newKey = {
       id: randomUUID(),
@@ -468,9 +540,15 @@ export const createApiKey = async (req: Request, res: Response) => {
       key,
       hashedKey,
       permissions: JSON.stringify(permissions),
-      createdBy: (req.user as any).id,
+      scopes: scopes ? JSON.stringify(scopes) : null,
+      rateLimit: rateLimit || 100,
+      allowedIps: allowedIps ? JSON.stringify(allowedIps) : null,
+      expiresAt: expiresAt ? new Date(expiresAt) : null,
+      createdBy: user.id,
       createdAt: new Date(),
+      usageCount: 0,
       isActive: true,
+      metadata: metadata ? JSON.stringify(metadata) : null,
     };
 
     await db.insert(apiKeys).values(newKey);
@@ -480,8 +558,14 @@ export const createApiKey = async (req: Request, res: Response) => {
       name: newKey.name,
       key: newKey.key, // Only show on creation
       permissions: JSON.parse(newKey.permissions),
+      scopes: newKey.scopes ? JSON.parse(newKey.scopes) : null,
+      rateLimit: newKey.rateLimit,
+      allowedIps: newKey.allowedIps ? JSON.parse(newKey.allowedIps) : null,
+      expiresAt: newKey.expiresAt,
       createdAt: newKey.createdAt,
+      usageCount: newKey.usageCount,
       isActive: newKey.isActive,
+      metadata: newKey.metadata ? JSON.parse(newKey.metadata) : null,
     });
   } catch (error) {
     console.error('Create API key error:', error);
@@ -509,19 +593,137 @@ export const createApiKey = async (req: Request, res: Response) => {
  */
 export const deleteApiKey = async (req: Request, res: Response) => {
   try {
+    if (!req.user) {
+      console.log('Delete API key: Unauthorized - no user');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    const { permanent } = req.query; // Check if permanent delete is requested
+    const user = req.user as any;
+
+    console.log('Deleting API key:', { id, userId: user.id, userRole: user.role, permanent: permanent === 'true' });
+
+    // Admin can delete any key, regular users only their own
+    const condition = user.role === 'superadmin' || user.role === 'admin'
+      ? eq(apiKeys.id, id)
+      : and(eq(apiKeys.id, id), eq(apiKeys.createdBy, user.id));
+
+    if (permanent === 'true') {
+      // Hard delete - permanently remove from database
+      const result = await db
+        .delete(apiKeys)
+        .where(condition);
+
+      console.log('Permanent delete result:', result);
+      res.json({ success: true, message: 'API key permanently deleted' });
+    } else {
+      // Soft delete - just deactivate
+      const result = await db
+        .update(apiKeys)
+        .set({ isActive: false })
+        .where(condition);
+
+      console.log('Deactivate result:', result);
+      res.json({ success: true });
+    }
+  } catch (error) {
+    console.error('Delete API key error:', error);
+    res.status(500).json({ error: 'Failed to delete API key', details: String(error) });
+  }
+};
+
+// Update API key (permissions, rate limit, etc.)
+export const updateApiKey = async (req: Request, res: Response) => {
+  try {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
     const { id } = req.params;
+    const { name, permissions, scopes, rateLimit, allowedIps, expiresAt, isActive, metadata } = req.body;
+    const user = req.user as any;
 
-    await db
-      .update(apiKeys)
-      .set({ isActive: false })
-      .where(and(eq(apiKeys.id, id), eq(apiKeys.createdBy, (req.user as any).id)));
+    // Admin can update any key, regular users only their own
+    const condition = user.role === 'superadmin' || user.role === 'admin'
+      ? eq(apiKeys.id, id)
+      : and(eq(apiKeys.id, id), eq(apiKeys.createdBy, user.id));
+
+    const updates: any = {};
+    if (name !== undefined) updates.name = name;
+    if (permissions !== undefined) updates.permissions = JSON.stringify(permissions);
+    if (scopes !== undefined) updates.scopes = scopes ? JSON.stringify(scopes) : null;
+    if (rateLimit !== undefined) updates.rateLimit = rateLimit;
+    if (allowedIps !== undefined) updates.allowedIps = allowedIps ? JSON.stringify(allowedIps) : null;
+    if (expiresAt !== undefined) updates.expiresAt = expiresAt ? new Date(expiresAt) : null;
+    if (isActive !== undefined) updates.isActive = isActive;
+    if (metadata !== undefined) updates.metadata = metadata ? JSON.stringify(metadata) : null;
+
+    await db.update(apiKeys).set(updates).where(condition);
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Delete API key error:', error);
-    res.status(500).json({ error: 'Failed to delete API key' });
+    console.error('Update API key error:', error);
+    res.status(500).json({ error: 'Failed to update API key' });
+  }
+};
+
+// Regenerate API key (creates new key string, keeps same permissions)
+export const regenerateApiKey = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { id } = req.params;
+    const user = req.user as any;
+
+    // Admin can regenerate any key, regular users only their own
+    const condition = user.role === 'superadmin' || user.role === 'admin'
+      ? eq(apiKeys.id, id)
+      : and(eq(apiKeys.id, id), eq(apiKeys.createdBy, user.id));
+
+    // Generate new API key
+    const newKey = `bkp_${randomUUID().replace(/-/g, '')}`;
+    const hashedKey = newKey;
+
+    await db.update(apiKeys)
+      .set({ key: newKey, hashedKey, usageCount: 0 })
+      .where(condition);
+
+    res.json({ success: true, newKey }); // Only show new key once
+  } catch (error) {
+    console.error('Regenerate API key error:', error);
+    res.status(500).json({ error: 'Failed to regenerate API key' });
+  }
+};
+
+// Get API key statistics
+export const getApiKeyStats = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { id } = req.params;
+    const user = req.user as any;
+
+    const condition = user.role === 'superadmin' || user.role === 'admin'
+      ? eq(apiKeys.id, id)
+      : and(eq(apiKeys.id, id), eq(apiKeys.createdBy, user.id));
+
+    const [keyData] = await db.select().from(apiKeys).where(condition).limit(1);
+
+    if (!keyData) {
+      return res.status(404).json({ error: 'API key not found' });
+    }
+
+    res.json({
+      id: keyData.id,
+      name: keyData.name,
+      usageCount: keyData.usageCount || 0,
+      lastUsed: keyData.lastUsed,
+      createdAt: keyData.createdAt,
+      rateLimit: keyData.rateLimit,
+      isActive: keyData.isActive,
+    });
+  } catch (error) {
+    console.error('Get API key stats error:', error);
+    res.status(500).json({ error: 'Failed to get API key statistics' });
   }
 };
 

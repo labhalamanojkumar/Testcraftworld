@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import ArticleEngagement from "@/components/ArticleEngagement";
 import { Badge } from "@/components/ui/badge";
 import { Clock, User, Calendar } from "lucide-react";
 
@@ -96,7 +97,7 @@ export default function ArticlePage() {
             </div>
           </header>
 
-          <div className="prose prose-lg max-w-none">
+          <div className="prose prose-lg max-w-none dark:prose-invert prose-headings:text-foreground prose-strong:text-foreground prose-p:text-foreground prose-li:text-foreground">
             <p className="text-xl text-muted-foreground mb-8">{article.excerpt}</p>
             <div dangerouslySetInnerHTML={{ __html: article.content }} />
           </div>
@@ -112,6 +113,15 @@ export default function ArticlePage() {
               </div>
             </footer>
           )}
+
+          {/* Engagement Section */}
+          <div className="mt-12">
+            <ArticleEngagement
+              articleId={article.id}
+              articleTitle={article.title}
+              articleUrl={window.location.href}
+            />
+          </div>
         </article>
       </main>
       

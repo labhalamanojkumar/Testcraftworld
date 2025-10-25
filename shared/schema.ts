@@ -92,10 +92,39 @@ export const apiKeys = mysqlTable("api_keys", {
   key: varchar("key", { length: 255 }).notNull().unique(),
   hashedKey: text("hashed_key").notNull(),
   permissions: text("permissions").notNull(), // JSON string of permissions array
+  scopes: text("scopes"), // JSON: specific resource access (articles, analytics, etc.)
+  rateLimit: int("rate_limit").default(100), // Requests per hour
+  allowedIps: text("allowed_ips"), // JSON array of allowed IP addresses
+  expiresAt: datetime("expires_at"), // Optional expiration date
   createdBy: varchar("created_by", { length: 36 }).references(() => users.id),
   createdAt: datetime("created_at").default(sql`NOW()`),
   lastUsed: datetime("last_used"),
+  usageCount: int("usage_count").default(0), // Total number of API calls
   isActive: boolean("is_active").default(true),
+  metadata: text("metadata"), // JSON: additional info like AI model preferences, notes, etc.
+});
+
+// Likes table for article engagement
+export const likes = mysqlTable("likes", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
+  articleId: varchar("article_id", { length: 36 }).notNull().references(() => articles.id),
+  userId: varchar("user_id", { length: 36 }).references(() => users.id), // Nullable for anonymous likes
+  ipAddress: varchar("ip_address", { length: 45 }), // For anonymous like tracking
+  createdAt: datetime("created_at").default(sql`NOW()`),
+});
+
+// Comments table for article discussions
+export const comments = mysqlTable("comments", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
+  articleId: varchar("article_id", { length: 36 }).notNull().references(() => articles.id),
+  userId: varchar("user_id", { length: 36 }).references(() => users.id),
+  parentId: varchar("parent_id", { length: 36 }).references((): any => comments.id), // For nested replies
+  content: text("content").notNull(),
+  authorName: varchar("author_name", { length: 255 }), // For guest comments
+  authorEmail: varchar("author_email", { length: 255 }), // For guest comments
+  isApproved: boolean("is_approved").default(true), // Moderation support
+  createdAt: datetime("created_at").default(sql`NOW()`),
+  updatedAt: datetime("updated_at").default(sql`NOW()`),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -173,10 +202,35 @@ export const insertApiKeySchema = createInsertSchema(apiKeys).pick({
   key: true,
   hashedKey: true,
   permissions: true,
+  scopes: true,
+  rateLimit: true,
+  allowedIps: true,
+  expiresAt: true,
   createdBy: true,
   createdAt: true,
   lastUsed: true,
+  usageCount: true,
   isActive: true,
+  metadata: true,
+});
+
+export const insertLikeSchema = createInsertSchema(likes).pick({
+  articleId: true,
+  userId: true,
+  ipAddress: true,
+  createdAt: true,
+});
+
+export const insertCommentSchema = createInsertSchema(comments).pick({
+  articleId: true,
+  userId: true,
+  parentId: true,
+  content: true,
+  authorName: true,
+  authorEmail: true,
+  isApproved: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -193,3 +247,7 @@ export type InsertPageView = z.infer<typeof insertPageViewSchema>;
 export type PageView = typeof pageViews.$inferSelect;
 export type InsertApiKey = z.infer<typeof insertApiKeySchema>;
 export type ApiKey = typeof apiKeys.$inferSelect;
+export type InsertLike = z.infer<typeof insertLikeSchema>;
+export type Like = typeof likes.$inferSelect;
+export type InsertComment = z.infer<typeof insertCommentSchema>;
+export type Comment = typeof comments.$inferSelect;

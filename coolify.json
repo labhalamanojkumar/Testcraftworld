@@ -25,7 +25,21 @@
         "PORT": "${{PORT}}",
         "SESSION_SECRET": "${{SESSION_SECRET}}",
         "SUPER_ADMIN_USERNAME": "${{SUPER_ADMIN_USERNAME}}",
-        "SUPER_ADMIN_PASSWORD": "${{SUPER_ADMIN_PASSWORD}}"
+        "SUPER_ADMIN_PASSWORD": "${{SUPER_ADMIN_PASSWORD}}",
+        "# Database (recommended)": "",
+        "DATABASE_URL": "${{DATABASE_URL}}",
+        "DB_HOST": "${{DB_HOST}}",
+        "DB_PORT": "${{DB_PORT}}",
+        "DB_USER": "${{DB_USER}}",
+        "DB_PASSWORD": "${{DB_PASSWORD}}",
+        "DB_NAME": "${{DB_NAME}}",
+        "# Optional: S3 / object storage for uploads": "",
+        "AWS_ACCESS_KEY_ID": "${{AWS_ACCESS_KEY_ID}}",
+        "AWS_SECRET_ACCESS_KEY": "${{AWS_SECRET_ACCESS_KEY}}",
+        "AWS_REGION": "${{AWS_REGION}}",
+        "S3_BUCKET": "${{S3_BUCKET}}",
+        "# Optional: other provider keys (eg. CLOUDINARY)": "",
+        "CLOUDINARY_URL": "${{CLOUDINARY_URL}}"
       },
       "healthcheck": {
         "type": "http",

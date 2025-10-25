@@ -63,3 +63,39 @@
     @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8;
   }
 }
+
+/* Ensure article/body text and typographic elements follow theme-aware foreground color
+   so headings, bold text and paragraphs are black in light mode and white in dark mode. */
+@layer base {
+  .prose,
+  .prose p,
+  .prose li,
+  .prose blockquote,
+  .prose td,
+  .prose th {
+    /* Use the theme-aware foreground color defined in :root/.dark */
+    color: hsl(var(--foreground));
+  }
+
+  /* Headings should explicitly inherit the foreground for clarity */
+  .prose h1,
+  .prose h2,
+  .prose h3,
+  .prose h4,
+  .prose h5,
+  .prose h6 {
+    color: hsl(var(--foreground));
+  }
+
+  /* Strong/bold text should also use the foreground color */
+  .prose strong,
+  .prose b {
+    color: hsl(var(--foreground));
+  }
+
+  /* Keep links using primary color but ensure good contrast by using primary-foreground when needed */
+  .prose a {
+    color: hsl(var(--primary));
+    text-decoration: underline;
+  }
+}

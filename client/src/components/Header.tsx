@@ -1,16 +1,19 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Menu, X, PenSquare, Sun, Moon } from "lucide-react";
+import { Search, Menu, X, PenSquare, Sun, Moon, User, LayoutDashboard, UserCircle, LogOut } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const categories = [
   "Business",
@@ -27,11 +30,29 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const { theme, setTheme } = useTheme();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user, logout } = useAuth();
+  const [, setLocation] = useLocation();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     console.log("Searching for:", searchQuery);
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    setLocation("/");
+  };
+
+  const getUserInitials = () => {
+    if (!user) return "U";
+    if (user.name) {
+      const names = user.name.split(" ");
+      if (names.length >= 2) {
+        return `${names[0][0]}${names[1][0]}`.toUpperCase();
+      }
+      return user.name.substring(0, 2).toUpperCase();
+    }
+    return user.username?.substring(0, 2).toUpperCase() || "U";
   };
 
   return (
@@ -92,18 +113,55 @@ export default function Header() {
               </Button>
             )}
 
-            <Button variant="ghost" size="sm" className="hidden sm:flex" asChild data-testid="button-login">
-              <Link href="/login">Login</Link>
-            </Button>
+            {!isAuthenticated && (
+              <>
+                <Button variant="ghost" size="sm" className="hidden sm:flex" asChild data-testid="button-login">
+                  <Link href="/login">Login</Link>
+                </Button>
 
-            <Button variant="outline" size="sm" className="hidden sm:flex" asChild data-testid="button-register">
-              <Link href="/register">Sign Up</Link>
-            </Button>
+                <Button variant="outline" size="sm" className="hidden sm:flex" asChild data-testid="button-register">
+                  <Link href="/register">Sign Up</Link>
+                </Button>
+              </>
+            )}
 
             {isAuthenticated && (
-              <Button variant="ghost" size="sm" className="hidden sm:flex" asChild data-testid="button-dashboard">
-                <Link href="/dashboard">Dashboard</Link>
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="hidden sm:flex gap-2" data-testid="button-user-menu">
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback className="text-xs">{getUserInitials()}</AvatarFallback>
+                    </Avatar>
+                    <span>{user?.name || user?.username}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{user?.name || user?.username}</p>
+                      <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/dashboard" className="cursor-pointer" data-testid="menu-dashboard">
+                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                      <span>Dashboard</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/profile" className="cursor-pointer" data-testid="menu-profile">
+                      <UserCircle className="mr-2 h-4 w-4" />
+                      <span>Profile</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600" data-testid="menu-logout">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Logout</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
 
             <Button
@@ -171,16 +229,46 @@ export default function Header() {
                   </Link>
                 </Button>
               )}
-              <Button variant="ghost" size="sm" className="justify-start" asChild data-testid="button-login-mobile">
-                <Link href="/login">Login</Link>
-              </Button>
-              <Button variant="outline" size="sm" className="justify-start" asChild data-testid="button-register-mobile">
-                <Link href="/register">Sign Up</Link>
-              </Button>
+              {!isAuthenticated && (
+                <>
+                  <Button variant="ghost" size="sm" className="justify-start" asChild data-testid="button-login-mobile">
+                    <Link href="/login">Login</Link>
+                  </Button>
+                  <Button variant="outline" size="sm" className="justify-start" asChild data-testid="button-register-mobile">
+                    <Link href="/register">Sign Up</Link>
+                  </Button>
+                </>
+              )}
               {isAuthenticated && (
-                <Button variant="ghost" size="sm" className="justify-start" asChild data-testid="button-dashboard-mobile">
-                  <Link href="/dashboard">Dashboard</Link>
-                </Button>
+                <>
+                  <div className="my-2 border-t pt-2">
+                    <div className="px-2 py-2 text-sm font-medium text-muted-foreground">
+                      {user?.name || user?.username}
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="sm" className="justify-start" asChild data-testid="button-dashboard-mobile">
+                    <Link href="/dashboard">
+                      <LayoutDashboard className="h-4 w-4 mr-2" />
+                      Dashboard
+                    </Link>
+                  </Button>
+                  <Button variant="ghost" size="sm" className="justify-start" asChild data-testid="button-profile-mobile">
+                    <Link href="/profile">
+                      <UserCircle className="h-4 w-4 mr-2" />
+                      Profile
+                    </Link>
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="justify-start text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950" 
+                    onClick={handleLogout}
+                    data-testid="button-logout-mobile"
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Logout
+                  </Button>
+                </>
               )}
               <Button
                 variant="ghost"

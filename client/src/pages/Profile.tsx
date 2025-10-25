@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Save, Upload, User } from "lucide-react";
+import { ArrowLeft, Save, Upload, User, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface User {
@@ -35,6 +35,10 @@ export default function Profile() {
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
   const [avatar, setAvatar] = useState("");
+
+  // File upload state
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchUserProfile();
@@ -64,6 +68,68 @@ export default function Profile() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleImageUpload = async (file: File) => {
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Error",
+        description: "Please select a valid image file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "Error",
+        description: "Image size must be less than 5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAvatar(data.url);
+        toast({
+          title: "Success",
+          description: "Profile image uploaded successfully",
+        });
+      } else {
+        throw new Error('Upload failed');
+      }
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      toast({
+        title: "Error",
+        description: "Failed to upload image",
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      handleImageUpload(file);
     }
   };
 
@@ -164,12 +230,31 @@ export default function Profile() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-4">
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src={avatar || undefined} />
-                  <AvatarFallback className="text-xl">
-                    {name.split(" ").map(n => n[0]).join("").toUpperCase() || user.name.split(" ").map(n => n[0]).join("").toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative">
+                  <Avatar className="h-20 w-20">
+                    <AvatarImage src={avatar || undefined} />
+                    <AvatarFallback className="text-xl">
+                      {name.split(" ").map(n => n[0]).join("").toUpperCase() || user.name.split(" ").map(n => n[0]).join("").toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <Button
+                    size="icon"
+                    variant="secondary"
+                    className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    title="Upload profile image"
+                  >
+                    <Camera className="h-4 w-4" />
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                </div>
                 <div>
                   <h3 className="font-semibold text-xl">{name || user.name}</h3>
                   <p className="text-sm text-muted-foreground">@{user.username}</p>
@@ -178,6 +263,13 @@ export default function Profile() {
                   </Badge>
                 </div>
               </div>
+
+              {uploading && (
+                <div className="text-center py-2">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2"></div>
+                  <p className="text-sm text-muted-foreground">Uploading image...</p>
+                </div>
+              )}
 
               <Separator />
 
@@ -258,7 +350,7 @@ export default function Profile() {
                     placeholder="https://example.com/avatar.jpg"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Enter a URL for your profile picture
+                    Enter a URL for your profile picture or use the camera button above to upload an image
                   </p>
                 </div>
 

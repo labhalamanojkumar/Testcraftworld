@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type Category, type InsertCategory, type Article, type InsertArticle, type Visitor, type InsertVisitor, type Session, type InsertSession, type PageView, type InsertPageView } from "@shared/schema";
+import { type User, type InsertUser, type Category, type InsertCategory, type Article, type InsertArticle, type Visitor, type InsertVisitor, type Session, type InsertSession, type PageView, type InsertPageView, type Like, type InsertLike, type Comment, type InsertComment } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, categories, articles, visitors, sessions, pageViews } from "../shared/schema";
+import { users, categories, articles, visitors, sessions, pageViews, likes, comments } from "../shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 
 // modify the interface with any CRUD methods
@@ -62,6 +62,17 @@ export interface IStorage {
     hourlyStats: Array<{ hour: number; views: number; visitors: number }>;
     dailyStats: Array<{ date: string; views: number; visitors: number; sessions: number }>;
   }>;
+  // Likes and comments methods
+  createLike(like: InsertLike): Promise<Like>;
+  deleteLike(articleId: string, userId: string | null, ipAddress: string | null): Promise<boolean>;
+  getLikesByArticle(articleId: string): Promise<Like[]>;
+  getLikesCount(articleId: string): Promise<number>;
+  getUserLike(articleId: string, userId: string | null, ipAddress: string | null): Promise<Like | undefined>;
+  createComment(comment: InsertComment): Promise<Comment>;
+  updateComment(id: string, content: string): Promise<Comment | undefined>;
+  deleteComment(id: string): Promise<boolean>;
+  getCommentsByArticle(articleId: string): Promise<Comment[]>;
+  getCommentsCount(articleId: string): Promise<number>;
 }
 
 export class MemStorage implements IStorage {
@@ -71,6 +82,8 @@ export class MemStorage implements IStorage {
   private visitors: Map<string, Visitor>;
   private sessions: Map<string, Session>;
   private pageViews: Map<string, PageView>;
+  private likes: Map<string, Like>;
+  private comments: Map<string, Comment>;
 
   constructor() {
     this.users = new Map();
@@ -79,6 +92,8 @@ export class MemStorage implements IStorage {
     this.visitors = new Map();
     this.sessions = new Map();
     this.pageViews = new Map();
+    this.likes = new Map();
+    this.comments = new Map();
     // Seed some data
     this.seedData();
   }
@@ -528,6 +543,100 @@ export class MemStorage implements IStorage {
       hourlyStats,
       dailyStats,
     };
+  }
+
+  // Likes and comments methods for MemStorage
+  async createLike(insertLike: InsertLike): Promise<Like> {
+    const id = randomUUID();
+    const like: Like = {
+      id,
+      articleId: insertLike.articleId,
+      userId: insertLike.userId ?? null,
+      ipAddress: insertLike.ipAddress ?? null,
+      createdAt: new Date(),
+    };
+    this.likes.set(id, like);
+    return like;
+  }
+
+  async deleteLike(articleId: string, userId: string | null, ipAddress: string | null): Promise<boolean> {
+    const like = Array.from(this.likes.values()).find(
+      (l) => l.articleId === articleId && 
+             (userId ? l.userId === userId : l.ipAddress === ipAddress)
+    );
+    if (like) {
+      this.likes.delete(like.id);
+      return true;
+    }
+    return false;
+  }
+
+  async getLikesByArticle(articleId: string): Promise<Like[]> {
+    return Array.from(this.likes.values()).filter(
+      (like) => like.articleId === articleId
+    );
+  }
+
+  async getLikesCount(articleId: string): Promise<number> {
+    return Array.from(this.likes.values()).filter(
+      (like) => like.articleId === articleId
+    ).length;
+  }
+
+  async getUserLike(articleId: string, userId: string | null, ipAddress: string | null): Promise<Like | undefined> {
+    return Array.from(this.likes.values()).find(
+      (l) => l.articleId === articleId && 
+             (userId ? l.userId === userId : l.ipAddress === ipAddress)
+    );
+  }
+
+  async createComment(insertComment: InsertComment): Promise<Comment> {
+    const id = randomUUID();
+    const comment: Comment = {
+      id,
+      content: insertComment.content,
+      articleId: insertComment.articleId,
+      userId: insertComment.userId ?? null,
+      parentId: insertComment.parentId ?? null,
+      authorName: insertComment.authorName ?? null,
+      authorEmail: insertComment.authorEmail ?? null,
+      isApproved: insertComment.isApproved ?? true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.comments.set(id, comment);
+    return comment;
+  }
+
+  async updateComment(id: string, content: string): Promise<Comment | undefined> {
+    const comment = this.comments.get(id);
+    if (comment) {
+      comment.content = content;
+      comment.updatedAt = new Date();
+      this.comments.set(id, comment);
+      return comment;
+    }
+    return undefined;
+  }
+
+  async deleteComment(id: string): Promise<boolean> {
+    return this.comments.delete(id);
+  }
+
+  async getCommentsByArticle(articleId: string): Promise<Comment[]> {
+    return Array.from(this.comments.values())
+      .filter((comment) => comment.articleId === articleId)
+      .sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return aTime - bTime;
+      });
+  }
+
+  async getCommentsCount(articleId: string): Promise<number> {
+    return Array.from(this.comments.values()).filter(
+      (comment) => comment.articleId === articleId
+    ).length;
   }
 }
 
@@ -1078,6 +1187,97 @@ export class DbStorage implements IStorage {
       hourlyStats,
       dailyStats,
     };
+  }
+
+  // Likes methods
+  async createLike(like: InsertLike): Promise<Like> {
+    const id = randomUUID();
+    await db.insert(likes).values({ ...like, id });
+    const created = await db.select().from(likes).where(eq(likes.id, id)).limit(1);
+    return created[0];
+  }
+
+  async deleteLike(articleId: string, userId: string | null, ipAddress: string | null): Promise<boolean> {
+    try {
+      if (userId) {
+        await db.delete(likes)
+          .where(and(eq(likes.articleId, articleId), eq(likes.userId, userId)));
+        return true;
+      } else if (ipAddress) {
+        await db.delete(likes)
+          .where(and(eq(likes.articleId, articleId), eq(likes.ipAddress, ipAddress)));
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  async getLikesByArticle(articleId: string): Promise<Like[]> {
+    return await db.select().from(likes).where(eq(likes.articleId, articleId));
+  }
+
+  async getLikesCount(articleId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(likes)
+      .where(eq(likes.articleId, articleId));
+    return result?.count || 0;
+  }
+
+  async getUserLike(articleId: string, userId: string | null, ipAddress: string | null): Promise<Like | undefined> {
+    if (userId) {
+      const result = await db.select().from(likes)
+        .where(and(eq(likes.articleId, articleId), eq(likes.userId, userId)))
+        .limit(1);
+      return result[0];
+    } else if (ipAddress) {
+      const result = await db.select().from(likes)
+        .where(and(eq(likes.articleId, articleId), eq(likes.ipAddress, ipAddress)))
+        .limit(1);
+      return result[0];
+    }
+    return undefined;
+  }
+
+  // Comments methods
+  async createComment(comment: InsertComment): Promise<Comment> {
+    const id = randomUUID();
+    await db.insert(comments).values({ ...comment, id });
+    const created = await db.select().from(comments).where(eq(comments.id, id)).limit(1);
+    return created[0];
+  }
+
+  async updateComment(id: string, content: string): Promise<Comment | undefined> {
+    await db.update(comments)
+      .set({ content, updatedAt: new Date() })
+      .where(eq(comments.id, id));
+    const updated = await db.select().from(comments).where(eq(comments.id, id)).limit(1);
+    return updated[0];
+  }
+
+  async deleteComment(id: string): Promise<boolean> {
+    try {
+      await db.delete(comments).where(eq(comments.id, id));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async getCommentsByArticle(articleId: string): Promise<Comment[]> {
+    return await db.select().from(comments)
+      .where(and(eq(comments.articleId, articleId), eq(comments.isApproved, true)))
+      .orderBy(comments.createdAt);
+  }
+
+  async getCommentsCount(articleId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(comments)
+      .where(and(eq(comments.articleId, articleId), eq(comments.isApproved, true)));
+    return result?.count || 0;
   }
 }
 

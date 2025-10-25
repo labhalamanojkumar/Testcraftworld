@@ -59,6 +59,11 @@ export async function setupVite(app: Express, server: Server) {
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
 
+    // Skip API routes - they should be handled by the API routes registered before Vite
+    if (url.startsWith("/api/")) {
+      return next();
+    }
+
     try {
       log(`serving index.html for ${url}`);
       const clientTemplate = path.resolve(

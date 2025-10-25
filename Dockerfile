@@ -50,5 +50,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:${PORT:-3000}/health || exit 1
 
-# Start the application (production entrypoint). If migrations are required, use start:migrate
-CMD ["npm", "start"]
+# Start the application (production entrypoint with migrations)
+CMD ["npm", "run", "start:migrate"]

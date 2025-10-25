@@ -272,3 +272,35 @@
     inset: -1px;
   }
 }
+
+/* Ensure article/body text and typographic elements follow theme-aware foreground color
+   so headings, bold text and paragraphs are black in light mode and white in dark mode. */
+@layer base {
+  .prose,
+  .prose p,
+  .prose li,
+  .prose blockquote,
+  .prose td,
+  .prose th {
+    color: hsl(var(--foreground));
+  }
+
+  .prose h1,
+  .prose h2,
+  .prose h3,
+  .prose h4,
+  .prose h5,
+  .prose h6 {
+    color: hsl(var(--foreground));
+  }
+
+  .prose strong,
+  .prose b {
+    color: hsl(var(--foreground));
+  }
+
+  .prose a {
+    color: hsl(var(--primary));
+    text-decoration: underline;
+  }
+}

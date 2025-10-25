@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,11 +10,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import Dashboard from "@/components/Dashboard";
 import RichTextEditor from "@/components/RichTextEditor";
 import SEOFields from "@/components/SEOFields";
 import Header from "@/components/Header";
 import AnalyticsDashboard from "@/components/AnalyticsDashboard";
+import ApiKeyManager from "@/components/ApiKeyManager";
 import { Save, Eye, Send, Plus, LayoutDashboard, FileText, Users, BarChart3, Key, Code } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -47,9 +49,9 @@ interface Article {
 }
 
 export default function Admin() {
+  const { user, loading, login: authLogin } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [newCategory, setNewCategory] = useState({ name: "", slug: "", description: "" });
   const [newArticle, setNewArticle] = useState({
@@ -61,38 +63,31 @@ export default function Admin() {
   const [articleFocusKeyword, setArticleFocusKeyword] = useState("");
   const queryClient = useQueryClient();
 
+  // Check admin access
+  useEffect(() => {
+    if (!loading && user && user.role !== 'admin' && user.role !== 'superadmin') {
+      toast({ 
+        title: "Access Denied", 
+        description: "Admin access required", 
+        variant: 'destructive' 
+      });
+    }
+  }, [user, loading]);
+
   const loginMutation = useMutation({
     mutationFn: async (credentials: { username: string; password: string }) => {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(credentials),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ message: "Network error" }));
-        throw new Error(errorData.message || "Login failed");
-      }
-
-      return res.json();
+      return authLogin(credentials.username, credentials.password);
     },
-    onSuccess: (data) => {
-      // Ensure logged in user is an admin
-      const loggedInUser = data.user as any;
-      if (loggedInUser?.role !== 'admin' && loggedInUser?.role !== 'superadmin') {
-        toast({ title: "Access denied", description: "Admin access required", variant: 'destructive' });
-        return;
+    onSuccess: (result) => {
+      if (result.success) {
+        toast({ title: "Logged in successfully" });
+      } else {
+        toast({
+          title: "Login Failed",
+          description: result.error || "Invalid username or password",
+          variant: "destructive"
+        });
       }
-
-      setUser(loggedInUser);
-      toast({ title: "Logged in successfully" });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Login Failed",
-        description: error.message || "Invalid username or password",
-        variant: "destructive"
-      });
     },
   });
 
@@ -158,7 +153,7 @@ export default function Admin() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="p-6 w-full max-w-md">
-          <h1 className="text-2xl font-bold mb-4">Super Admin Login</h1>
+          <h1 className="text-2xl font-bold mb-4">Admin Login</h1>
           <form onSubmit={(e) => {
             e.preventDefault();
             loginMutation.mutate({ username, password });
@@ -172,9 +167,28 @@ export default function Admin() {
                 <Label htmlFor="password">Password</Label>
                 <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
               </div>
-              <Button type="submit" className="w-full">Login</Button>
+              <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
+                {loginMutation.isPending ? "Logging in..." : "Login"}
+              </Button>
             </div>
           </form>
+        </Card>
+      </div>
+    );
+  }
+
+  // Check if user is admin or superadmin
+  if (user.role !== 'admin' && user.role !== 'superadmin') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="p-6 w-full max-w-md">
+          <h1 className="text-2xl font-bold mb-4 text-red-600">Access Denied</h1>
+          <p className="text-muted-foreground mb-4">
+            You do not have permission to access the admin panel.
+          </p>
+          <Button onClick={() => window.location.href = '/'}>
+            Go to Home
+          </Button>
         </Card>
       </div>
     );
@@ -444,150 +458,7 @@ export default function Admin() {
           </TabsContent>
 
           <TabsContent value="api">
-            <div className="space-y-6">
-              <Card className="p-6">
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                  <Code className="h-5 w-5" />
-                  API Integration for AI Tools
-                </h2>
-                <p className="text-muted-foreground mb-4">
-                  Generate API keys to allow external AI tools and agents to interact with your blog platform.
-                  Use these APIs for content generation, analytics, and automation.
-                </p>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <div className="p-4 border rounded-lg">
-                    <h3 className="font-semibold mb-2">API Documentation</h3>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Complete OpenAPI specification for all endpoints
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open('/api-docs', '_blank')}
-                    >
-                      View API Docs
-                    </Button>
-                  </div>
-
-                  <div className="p-4 border rounded-lg">
-                    <h3 className="font-semibold mb-2">Available Endpoints</h3>
-                    <ul className="text-sm text-muted-foreground space-y-1">
-                      <li>• Content Generation</li>
-                      <li>• Content Analysis</li>
-                      <li>• SEO Optimization</li>
-                      <li>• Analytics Insights</li>
-                    </ul>
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-bold flex items-center gap-2">
-                    <Key className="h-5 w-5" />
-                    API Keys
-                  </h3>
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Create API Key
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Create New API Key</DialogTitle>
-                      </DialogHeader>
-                      <form onSubmit={(e) => {
-                        e.preventDefault();
-                        // Create API key logic will be added
-                        toast({ title: "API Key created", description: "New API key has been generated." });
-                      }}>
-                        <div className="space-y-4">
-                          <div>
-                            <Label htmlFor="key-name">Key Name</Label>
-                            <Input id="key-name" placeholder="e.g., ChatGPT Integration" required />
-                          </div>
-                          <div>
-                            <Label>Permissions</Label>
-                            <div className="space-y-2 mt-2">
-                              {[
-                                { id: 'content:generate', label: 'Generate Content' },
-                                { id: 'content:analyze', label: 'Analyze Content' },
-                                { id: 'seo:optimize', label: 'SEO Optimization' },
-                                { id: 'insights:read', label: 'Read Insights' },
-                              ].map((perm) => (
-                                <div key={perm.id} className="flex items-center space-x-2">
-                                  <input type="checkbox" id={perm.id} defaultChecked />
-                                  <Label htmlFor={perm.id} className="text-sm">{perm.label}</Label>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          <Button type="submit" className="w-full">Create Key</Button>
-                        </div>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-
-                <div className="space-y-3">
-                  {/* Mock API keys for demonstration */}
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div>
-                      <p className="font-medium">ChatGPT Integration</p>
-                      <p className="text-sm text-muted-foreground">bkp_a1b2c3d4e5f6...</p>
-                      <p className="text-xs text-muted-foreground">Last used: 2 hours ago</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary">Active</Badge>
-                      <Button variant="outline" size="sm">Revoke</Button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div>
-                      <p className="font-medium">Content Automation</p>
-                      <p className="text-sm text-muted-foreground">bkp_x7y8z9w0v1u...</p>
-                      <p className="text-xs text-muted-foreground">Last used: Never</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary">Active</Badge>
-                      <Button variant="outline" size="sm">Revoke</Button>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-6">
-                <h3 className="text-lg font-bold mb-4">Usage Examples</h3>
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-semibold mb-2">Generate Blog Content</h4>
-                    <pre className="bg-muted p-3 rounded text-sm overflow-x-auto">
-{`curl -X POST http://localhost:3000/api/ai/generate-content \\
-  -H "X-API-Key: your-api-key" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "topic": "React Best Practices",
-    "type": "article",
-    "keywords": ["react", "javascript", "frontend"],
-    "tone": "professional"
-  }'`}
-                    </pre>
-                  </div>
-
-                  <div>
-                    <h4 className="font-semibold mb-2">Get Analytics Insights</h4>
-                    <pre className="bg-muted p-3 rounded text-sm overflow-x-auto">
-{`curl -X GET "http://localhost:3000/api/ai/insights?type=performance&timeframe=30d" \\
-  -H "X-API-Key: your-api-key"`}
-                    </pre>
-                  </div>
-                </div>
-              </Card>
-            </div>
+            <ApiKeyManager />
           </TabsContent>
         </Tabs>
       </div>
